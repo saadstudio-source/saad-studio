@@ -1,0 +1,75 @@
+name: SaadStudio deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy or rollback
+        required: true
+        type: choice
+        options: [deploy, rollback]
+      release_ref:
+        description: branch or commit SHA to release
+        required: true
+        default: main
+
+concurrency:
+  group: saadstudio-production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: ${{ inputs.release_ref }} }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npm run test:run -- --no-file-parallelism
+      - run: npm run build
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: saad_test
+          POSTGRES_PASSWORD: saad_test
+          POSTGRES_DB: saad_studio_test
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U saad_test -d saad_studio_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql://saad_test:saad_test@127.0.0.1:5433/saad_studio_test
+      DATABASE_URL: postgresql://saad_test:saad_test@127.0.0.1:5433/saad_studio_test
+      DIRECT_URL: postgresql://saad_test:saad_test@127.0.0.1:5433/saad_studio_test
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: ${{ inputs.release_ref }} }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
+      - run: npx prisma db push --skip-generate
+      - run: npm run test:integration
+
+  deploy:
+    needs: [verify, integration]
+    if: ${{ needs.verify.result == 'success' && needs.integration.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy immutable release over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.CONTABO_HOST }}
+          username: ${{ secrets.CONTABO_USER }}
+          key: ${{ secrets.CONTABO_SSH_KEY }}
+          fingerprint: ${{ secrets.CONTABO_SSH_FINGERPRINT }}
+          script: /opt/saadstudio/bin/deploy-release '${{ inputs.action }}' '${{ inputs.release_ref }}'

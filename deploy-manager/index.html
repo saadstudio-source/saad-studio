@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SaadStudio Deploy Manager · لوحة إدارة النشر</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- الشريط الجانبي (Sidebar) -->
+    <aside class="sidebar">
+      <div class="brand-header">
+        <div class="brand-logo">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+            <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/>
+            <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <span class="brand-title">SaadStudio</span>
+          <span class="brand-subtitle">مدير النشر والتشغيل</span>
+        </div>
+      </div>
+
+      <!-- بطاقة معالج الإعداد السريع في الشريط الجانبي -->
+      <div class="wizard-callout">
+        <div class="wizard-callout-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="wizard-callout-text">
+          <strong>معالج الإعداد الأولي</strong>
+          <small>تهيئة الربط في 5 خطوات</small>
+        </div>
+        <button id="btnLaunchWizard" class="btn-wizard-trigger" title="تشغيل معالج الإعداد">بدء</button>
+      </div>
+
+      <!-- قائمة التنقل الرئيسية -->
+      <nav class="nav-menu" aria-label="التنقل الرئيسي">
+        <button id="navDashboard" class="nav-item active" data-view="view-dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="7" height="9" x="3" y="3" rx="1"/>
+            <rect width="7" height="5" x="14" y="3" rx="1"/>
+            <rect width="7" height="9" x="14" y="12" rx="1"/>
+            <rect width="7" height="5" x="3" y="16" rx="1"/>
+          </svg>
+          <span>لوحة التحكم الرئيسية</span>
+        </button>
+
+        <button id="navGithub" class="nav-item" data-view="view-github">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/>
+            <path d="M9 18c-4.51 2-5-2-7-2"/>
+          </svg>
+          <span>إعدادات GitHub</span>
+        </button>
+
+        <button id="navContabo" class="nav-item" data-view="view-contabo">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/>
+            <rect width="20" height="8" x="2" y="14" rx="2" ry="2"/>
+            <line x1="6" x2="6.01" y1="6" y2="6"/>
+            <line x1="6" x2="6.01" y1="18" y2="18"/>
+          </svg>
+          <span>إعدادات Contabo</span>
+        </button>
+
+        <button id="navSsh" class="nav-item" data-view="view-ssh">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m21 2-2 2m-1.5 1.5L14 9l-1.5-1.5L10 10l-1.5-1.5L7 10 3 6"/>
+            <circle cx="7.5" cy="15.5" r="5.5"/>
+          </svg>
+          <span>إدارة مفاتيح SSH</span>
+        </button>
+
+        <button id="navAudit" class="nav-item" data-view="view-audit">
+          <span>التشخيص الشامل للسيرفر</span>
+        </button>
+        <button id="navRepair" class="nav-item" data-view="view-repair">
+          <span>إصلاح وتجهيز السيرفر</span>
+        </button>
+
+        <button id="navRuns" class="nav-item" data-view="view-runs">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>سجل النشر والتشغيل</span>
+        </button>
+
+        <button id="navSettings" class="nav-item" data-view="view-settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span>الإعدادات العامة</span>
+        </button>
+      </nav>
+
+      <!-- تذييل الشريط الجانبي (ملخص حالات الخدمات) -->
+      <div class="sidebar-footer">
+        <div class="service-indicators">
+          <div class="indicator-item" id="indGithub" title="حالة GitHub">
+            <span class="dot"></span>
+            <span class="label">GitHub</span>
+          </div>
+          <div class="indicator-item" id="indContabo" title="خادم Contabo">
+            <span class="dot"></span>
+            <span class="label">Contabo</span>
+          </div>
+          <div class="indicator-item" id="indActions" title="GitHub Actions">
+            <span class="dot"></span>
+            <span class="label">Actions</span>
+          </div>
+          <div class="indicator-item" id="indHealth" title="فحص صحة الموقع">
+            <span class="dot"></span>
+            <span class="label">الموقع</span>
+          </div>
+        </div>
+        <div class="app-version" id="appVersion">SaadStudio Deploy Manager · الإصدار 2.1.0-repair-wizard · بناء 2026-11-04</div>
+      </div>
+    </aside>
+
+    <!-- منطقة المحتوى الرئيسية (Main Workspace) -->
+    <main class="main-content">
+      <!-- الشريط العلوي (Top Bar) -->
+      <header class="topbar">
+        <div class="topbar-title-group">
+          <h1 id="pageTitle">لوحة التحكم الرئيسية</h1>
+          <p class="topbar-desc" id="pageDesc">مراقبة الاتصالات وإدارة نشر موقع SaadStudio بأمان</p>
+        </div>
+        <div class="topbar-actions">
+          <span id="badge" class="status-badge badge-neutral">جارٍ التحقق…</span>
+          <button id="btnQuickRefresh" class="btn btn-secondary btn-sm" title="تحديث شامل للحالات">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+              <path d="M16 16h5v5"/>
+            </svg>
+            <span>تحديث شامل</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- مساحة الصفحات القابلة للتبديل -->
+      <div class="views-container">
+
+        <!-- 1. لوحة التحكم الرئيسية (DASHBOARD) -->
+        <section id="view-dashboard" class="content-view active">
+          <!-- شبكة بطاقات الحالة الأربعة -->
+          <div class="status-grid">
+            <!-- بطاقة GitHub -->
+            <div class="status-card" id="cardGithubStatus">
+              <div class="card-header">
+                <div class="card-icon icon-github">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/>
+                  </svg>
+                </div>
+                <span class="card-badge" id="pillGithub">فحص…</span>
+              </div>
+              <h3 class="card-title">حساب GitHub</h3>
+              <div class="card-meta">
+                <div class="meta-row"><span class="k">المستخدم:</span> <span class="v" id="valGithubUser">—</span></div>
+                <div class="meta-row"><span class="k">المستودع:</span> <span class="v" id="valGithubRepo">seedsat1/saad-studio</span></div>
+                <div class="meta-row"><span class="k">الصلاحيات:</span> <span class="v" id="valGithubPerms">—</span></div>
+              </div>
+            </div>
+
+            <!-- بطاقة Contabo -->
+            <div class="status-card" id="cardContaboStatus">
+              <div class="card-header">
+                <div class="card-icon icon-server">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/>
+                    <rect width="20" height="8" x="2" y="14" rx="2" ry="2"/>
+                    <line x1="6" x2="6.01" y1="6" y2="6"/>
+                    <line x1="6" x2="6.01" y1="18" y2="18"/>
+                  </svg>
+                </div>
+                <span class="card-badge" id="pillContabo">فحص…</span>
+              </div>
+              <h3 class="card-title">خادم Contabo</h3>
+              <div class="card-meta">
+                <div class="meta-row"><span class="k">الآيبي:</span> <span class="v code-span" id="valContaboHost">161.97.77.229</span></div>
+                <div class="meta-row"><span class="k">مستخدم النشر:</span> <span class="v" id="valContaboUser">saaddeploy</span></div>
+                <div class="meta-row"><span class="k">بصمة SSH:</span> <span class="v" id="valContaboFpStatus">—</span></div>
+              </div>
+            </div>
+
+            <!-- بطاقة GitHub Actions -->
+            <div class="status-card" id="cardActionsStatus">
+              <div class="card-header">
+                <div class="card-icon icon-actions">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                  </svg>
+                </div>
+                <span class="card-badge" id="pillActions">فحص…</span>
+              </div>
+              <h3 class="card-title">جاهزية Actions</h3>
+              <div class="card-meta">
+                <div class="meta-row"><span class="k">ملف Workflow:</span> <span class="v" id="valActionsWorkflow">deploy.yml</span></div>
+                <div class="meta-row"><span class="k">البيئة:</span> <span class="v" id="valActionsEnv">Production</span></div>
+                <div class="meta-row"><span class="k">أسرار النشر:</span> <span class="v" id="valActionsSecrets">—</span></div>
+              </div>
+            </div>
+
+            <!-- بطاقة صحة الموقع -->
+            <div class="status-card" id="cardHealthStatus">
+              <div class="card-header">
+                <div class="card-icon icon-health">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                </div>
+                <span class="card-badge" id="pillHealth">فحص…</span>
+              </div>
+              <h3 class="card-title">حالة الموقع المباشر</h3>
+              <div class="card-meta">
+                <div class="meta-row"><span class="k">النطاق:</span> <span class="v" id="valHealthDomain">saadstudio.app</span></div>
+                <div class="meta-row"><span class="k">نقطة الفحص:</span> <span class="v code-span">/api/health</span></div>
+                <div class="meta-row"><span class="k">رمز الاستجابة:</span> <span class="v" id="valHealthCode">—</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- مركز عمليات النشر (Hero Deployment Hub) -->
+          <div class="deploy-hero-card">
+            <div class="deploy-hero-info">
+              <div class="readiness-banner" id="readinessBanner">
+                <div class="readiness-icon" id="readinessIcon">⏳</div>
+                <div class="readiness-text">
+                  <h2 id="readinessTitle">جارٍ تقييم جاهزية النشر…</h2>
+                  <p id="readinessDesc">يتم التحقق من ربط GitHub، وبصمة خادم Contabo، واستجابة الموقع المباشر.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="deploy-hero-actions">
+              <button id="deploy" class="btn btn-primary btn-deploy-large" disabled>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+                  <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+                </svg>
+                <span>نشر الإصدار الرئيسي الآن</span>
+              </button>
+
+              <button id="rollback" class="btn btn-danger-soft btn-rollback" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+                <span id="rollbackLabel">التراجع عن آخر إصدار (Rollback)</span>
+              </button>
+
+              <div class="hero-aux-actions">
+                <button id="status" class="btn btn-secondary btn-sm" title="فحص صحة الخادم والموقع بالتفصيل">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" x2="12" y1="16" y2="12"/>
+                    <line x1="12" x2="12.01" y1="8" y2="8"/>
+                  </svg>
+                  <span>فحص صحة السيرفر</span>
+                </button>
+                <button id="ssh" class="btn btn-secondary btn-sm" title="اختبار اتصال SSH الآمن بالمفتاح المخزن">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 17 10 11 4 5"/>
+                    <line x1="12" x2="20" y1="19" y2="19"/>
+                  </svg>
+                  <span>اختبار اتصال SSH</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- قسم سجل العمليات الأخير ولوحة الطرفية -->
+          <div class="dashboard-split-grid">
+            <!-- قائمة آخر عمليات النشر -->
+            <div class="panel-box">
+              <div class="panel-header">
+                <div class="panel-title-group">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <h2>آخر عمليات النشر</h2>
+                </div>
+                <button id="refresh" class="btn btn-ghost btn-sm" title="تحديث السجل">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                    <path d="M3 3v5h5"/>
+                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                    <path d="M16 16h5v5"/>
+                  </svg>
+                  <span>تحديث السجل</span>
+                </button>
+              </div>
+              <div id="runs" class="runs-list">
+                <div class="empty-state">جارٍ جلب سجل النشر من GitHub Actions…</div>
+              </div>
+            </div>
+
+            <!-- سجل النشاط والمخرجات الحية -->
+            <div class="panel-box">
+              <div class="panel-header">
+                <div class="panel-title-group">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 17 10 11 4 5"/>
+                    <line x1="12" x2="20" y1="19" y2="19"/>
+                  </svg>
+                  <h2>سجل النشاط ومخرجات الأوامر</h2>
+                </div>
+                <div class="panel-header-actions">
+                  <button id="btnClearOutput" class="btn btn-ghost btn-xs" title="مسح السجل">مسح</button>
+                  <button id="btnCopyOutput" class="btn btn-ghost btn-xs" title="نسخ المخرجات">نسخ</button>
+                </div>
+              </div>
+              <pre id="output" class="terminal-output">بانتظار تنفيذ العمليات أو الفحوصات…</pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. إعدادات GITHUB -->
+        <section id="view-github" class="content-view">
+          <div class="form-container">
+            <div class="section-card">
+              <div class="section-card-header">
+                <h2>ربط GitHub السريع عبر OAuth Device Flow</h2>
+                <p>يتيح ربط حسابك دون الحاجة لنسخ رموز التوكن يدوياً، بتوليد رمز موافقة آمن.</p>
+              </div>
+              <div class="form-grid">
+                <div class="form-group full-width">
+                  <label for="githubClientId">GitHub OAuth Client ID</label>
+                  <input id="githubClientId" type="text" placeholder="مثال: Iv23li..." autocomplete="off">
+                  <small class="form-hint">معرف تطبيق OAuth المسجل في GitHub مع صلاحيات repo و workflow.</small>
+                </div>
+              </div>
+              <div class="card-footer-actions">
+                <button id="githubSetup" class="btn btn-primary">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/></svg>
+                  <span>بدء تفويض GitHub Device Flow</span>
+                </button>
+              </div>
+              <!-- صندوق كود التفويض عند بدء العملية -->
+              <div id="deviceFlowBox" class="device-flow-card" style="display: none;">
+                <div class="device-flow-header">
+                  <strong>رمز التفويض المطلوب:</strong>
+                  <span id="deviceFlowCode" class="user-code-display" dir="ltr">----</span>
+                </div>
+                <p>اضغط الزر أدناه لفتح صفحة GitHub وألصق الرمز أعلاه، ثم اضغط Continue:</p>
+                <div class="device-flow-actions">
+                  <button id="deviceFlowOpen" class="btn btn-secondary btn-sm" type="button">فتح صفحة تأكيد GitHub</button>
+                  <button id="deviceFlowCopy" class="btn btn-secondary btn-sm" type="button">نسخ الرمز</button>
+                  <a id="deviceFlowLink" href="#" target="_blank" hidden>GitHub</a>
+                  <span id="deviceFlowStatus" class="device-flow-status">بانتظار إدخال الرمز…</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-card-header">
+                <h2>إعدادات المستودع وتوكن الوصول اليدوي</h2>
+                <p>يمكنك أيضاً إدخال Personal Access Token كبديل يُحفظ مباشرة في Windows Credential Manager.</p>
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="owner">مالك المستودع (Owner)</label>
+                  <input id="owner" type="text" placeholder="seedsat1">
+                </div>
+                <div class="form-group">
+                  <label for="repo">اسم المستودع (Repository)</label>
+                  <input id="repo" type="text" placeholder="saad-studio">
+                </div>
+                <div class="form-group">
+                  <label for="workflow">ملف النشر (Workflow File)</label>
+                  <input id="workflow" type="text" placeholder="deploy.yml">
+                </div>
+                <div class="form-group">
+                  <label for="githubToken">GitHub Token (يُحفظ بأمان في Credential Manager)</label>
+                  <input id="githubToken" type="password" placeholder="ghp_... أو اترك فارغاً إذا كان محفوظاً">
+                  <small class="form-hint">مشفر بأمان عبر Windows DPAPI ولا يظهر في السجلات أبداً.</small>
+                </div>
+              </div>
+              <div class="card-footer-actions">
+                <button id="saveGithubSettings" class="btn btn-primary">حفظ إعدادات GitHub</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. إعدادات CONTABO -->
+        <section id="view-contabo" class="content-view">
+          <div class="form-container">
+            <div class="section-card">
+              <div class="section-card-header">
+                <h2>بيانات خادم Contabo المستهدف</h2>
+                <p>إعدادات عنوان الخادم ونطاق التشغيل ومعلومات الاتصال الأساسية.</p>
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="host">عنوان الخادم (SSH Host IP)</label>
+                  <input id="host" type="text" placeholder="161.97.77.229" dir="ltr" class="text-left">
+                </div>
+                <div class="form-group">
+                  <label for="domain">النطاق الأساسي (Domain)</label>
+                  <input id="domain" type="text" placeholder="saadstudio.app" dir="ltr" class="text-left">
+                </div>
+                <div class="form-group">
+                  <label for="user">مستخدم الـ SSH الأساسي (Bootstrap User)</label>
+                  <input id="user" type="text" placeholder="root">
+                  <small class="form-hint">المستخدم المسؤول الأولي لتثبيت مفتاح النشر وتجهيز المجلدات.</small>
+                </div>
+                <div class="form-group">
+                  <label for="bootstrapPassword">كلمة مرور SSH الأولية (مؤقتة)</label>
+                  <input id="bootstrapPassword" type="password" placeholder="تُستخدم لمرة واحدة فقط ولا تُحفظ في أي ملف">
+                </div>
+              </div>
+            </div>
+
+            <!-- بطاقة بصمة الخادم والتحقق الأمني المستقل -->
+            <div class="section-card">
+              <div class="section-card-header">
+                <h2>بصمة الخادم (Server Host Fingerprint)</h2>
+                <p>مفتاح التحقق من هوية السيرفر لمنع أي انتحال عبر الشبكة (Man-in-the-Middle).</p>
+              </div>
+
+              <div class="form-group full-width">
+                <label for="fingerprint">بصمة SSH المعتمدة (بصيغة SHA256:...)</label>
+                <div class="input-with-button">
+                  <input id="fingerprint" type="text" placeholder="SHA256:..." dir="ltr" class="text-left code-input">
+                  <button id="fingerprintCheck" class="btn btn-secondary">استخراج بصمة السيرفر</button>
+                </div>
+              </div>
+
+              <!-- تنبيه أمني إلزامي -->
+              <div class="security-notice-box">
+                <div class="notice-icon">⚠️</div>
+                <div class="notice-body">
+                  <strong>تنبيه أمني هام بشأن بصمة الخادم:</strong>
+                  <p>استخراج البصمة من السيرفر يعتمد على أول مصافحة عبر الشبكة. لضمان أمان خادمك التام، يجب عليك مطابقة البصمة مع شاشة لوحة تحكم Contabo أو سجلات الخادم المستقلة قبل تأكيد الربط.</p>
+                  <label class="checkbox-container">
+                    <input type="checkbox" id="chkVerifyFingerprint">
+                    <span class="checkmark"></span>
+                    <span class="checkbox-label">لقد تحققت من بصمة SSH بشكل مستقل وأريد اعتمادها</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="card-footer-actions">
+                <button id="contaboSetup" class="btn btn-accent">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <span>تجهيز مستخدم النشر saaddeploy وتثبيت المفتاح</span>
+                </button>
+                <button id="saveContaboSettings" class="btn btn-secondary">حفظ إعدادات Contabo</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. إدارة مفاتيح SSH -->
+        <section id="view-ssh" class="content-view">
+          <div class="form-container">
+            <div class="section-card">
+              <div class="section-card-header">
+                <h2>مفتاح التشفير Ed25519 المخصص للنشر</h2>
+                <p>يستخدم مفتاح Ed25519 عالي الأمان للتواصل بين أدوات النشر وخادم Contabo عبر مصادقة المفاتيح حصراً.</p>
+              </div>
+
+              <div class="key-status-indicator" id="sshKeyStatusCard">
+                <div class="key-status-icon" id="sshKeyStatusIcon">🔑</div>
+                <div class="key-status-details">
+                  <strong id="sshKeyStatusTitle">حالة مفتاح SSH</strong>
+                  <p id="sshKeyStatusDesc">فحص المفتاح في Windows Credential Manager…</p>
+                </div>
+                <button id="generateSsh" class="btn btn-primary btn-sm">إنشاء مفتاح Ed25519 جديد</button>
+              </div>
+
+              <!-- عرض المفتاح العام لتثبيته في GitHub Secrets أو الخادم -->
+              <div class="form-group full-width" id="boxPublicKey" style="margin-top: 18px;">
+                <label for="publicSshKeyDisplay">المفتاح العام الناتج (Public Key - يمكن مشاركته بأمان)</label>
+                <div class="textarea-with-copy">
+                  <textarea id="publicSshKeyDisplay" readonly dir="ltr" class="code-textarea" placeholder="سيظهر المفتاح العام هنا فور إنشائه ليتم استخدامه في إعدادات النشر…"></textarea>
+                  <button id="btnCopyPublicKey" class="btn btn-secondary btn-xs">نسخ المفتاح العام</button>
+                  <button id="btnRestorePublicKey" class="btn btn-secondary btn-xs" type="button">استعادة المفتاح العام</button>
+                </div>
+              </div>
+
+              <div class="form-group full-width" style="margin-top: 16px;">
+                <label for="sshKey">المفتاح الخاص (Private Key - اختياري إذا أردت استيراد مفتاح يدوي)</label>
+                <textarea id="sshKey" placeholder="-----BEGIN OPENSSH PRIVATE KEY----- (لا يُحفظ في ملف نصي، بل يُخزن في Credential Manager مباشرة)" dir="ltr" class="code-textarea"></textarea>
+                <small class="form-hint">المفتاح الخاص يُحفظ مشفراً في مدير اعتمادات ويندوز ولن يُعرض في أي سجلات أو نوافذ.</small>
+              </div>
+
+              <div class="card-footer-actions">
+                <button id="saveSshSettings" class="btn btn-primary">حفظ المفتاح في Credential Manager</button>
+                <button id="btnTestSshQuick" class="btn btn-secondary">اختبار الاتصال السريع بالمفتاح</button>
+                <button id="btnAddSshSecret" class="btn btn-secondary">إضافة المفتاح إلى GitHub</button>
+                <span id="sshGithubSecretStatus" class="form-hint" role="status" aria-live="polite"></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-audit" class="content-view">
+          <div class="form-container">
+            <div class="section-card">
+              <div class="section-card-header">
+                <h2>التشخيص الشامل للسيرفر</h2>
+                <p>فحوصات قراءة فقط عبر SSH باستخدام المفتاح المحفوظ وبصمة الخادم المؤكدة. لا ينفذ Deploy أو Rollback.</p>
+              </div>
+              <div class="card-footer-actions">
+                <button id="btnStartServerAudit" class="btn btn-primary">بدء الفحص الشامل</button>
+                <button id="btnCancelServerAudit" class="btn btn-secondary" disabled>إلغاء الفحص</button>
+                <button id="btnCopyServerAudit" class="btn btn-secondary">نسخ التقرير الكامل</button>
+              </div>
+              <div id="serverAuditState" class="form-hint" role="status" aria-live="polite">لم يبدأ الفحص بعد.</div>
+              <div id="serverAuditResults" class="audit-results" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-repair" class="content-view">
+          <div class="form-container"><div class="section-card">
+            <div class="section-card-header"><h2>إصلاح وتجهيز السيرفر</h2><p>يعرض خطة محددة، ولا ينفذ أي تغيير إلا بعد موافقة منفصلة لكل خطوة.</p></div>
+            <div class="card-footer-actions"><button id="btnLoadRepairPlan" class="btn btn-primary">بدء الإصلاح</button><span id="repairState" class="form-hint" role="status" aria-live="polite">لم تُحمّل الخطة بعد.</span></div>
+            <div id="repairPlanResults" class="audit-results" aria-live="polite"></div>
+          </div></div>
+        </section>
+
+        <!-- 5. سجل النشر والتشغيل الكامل (RUNS & LOGS) -->
+        <section id="view-runs" class="content-view">
+          <div class="panel-box full-height-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <h2>سجل عمليات النشر على GitHub Actions</h2>
+              </div>
+              <div class="panel-header-actions">
+                <button id="btnRefreshRunsView" class="btn btn-secondary btn-sm">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                  <span>تحديث السجل</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="fullRunsList" class="runs-table-container">
+              <!-- جدول السجلات الكامل -->
+              <div class="empty-state">جارٍ تحميل سجل العمليات…</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. الإعدادات العامة (SETTINGS) -->
+        <section id="view-settings" class="content-view">
+          <div class="form-container">
+            <div class="section-card">
+              <div class="section-card-header">
+                <h2>حفظ جميع الإعدادات والاتصالات</h2>
+                <p>يتم تخزين البيانات غير الحساسة في settings.json والبيانات المشفرة في Windows Credential Manager.</p>
+              </div>
+
+              <div class="card-footer-actions" style="margin-bottom: 24px;">
+                <button id="save" class="btn btn-primary btn-lg">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  <span>حفظ جميع الإعدادات الحالية بأمان</span>
+                </button>
+                <button id="btnRestartWizard" class="btn btn-secondary">إعادة تشغيل معالج الإعداد الأولي</button>
+              </div>
+
+              <div class="system-diagnostic-info">
+                <h3>معلومات الأمان والنظام</h3>
+                <div class="meta-row"><span class="k">طريقة تخزين الأسرار:</span> <span class="v">Windows Credential Manager (keytar / DPAPI)</span></div>
+                <div class="meta-row"><span class="k">الخدمة المسجلة:</span> <span class="v">SaadStudio Deploy Manager</span></div>
+                <div class="meta-row"><span class="k">نطاق السيرفر الهدف:</span> <span class="v code-span">saadstudio.app (161.97.77.229)</span></div>
+                <div class="meta-row"><span class="k">قاعدة النشر الآمن:</span> <span class="v">لا يتم تنفيذ أي أمر محلي؛ كافة الإجراءات عبر GitHub Actions المحمي.</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. معالج الإعداد الأولي التفاعلي (SETUP WIZARD) -->
+        <section id="view-wizard" class="content-view">
+          <div class="wizard-wrapper">
+            <!-- شريط تقدم الخطوات الخمسة -->
+            <div class="wizard-stepper">
+              <div class="step-item active" data-step="1">
+                <div class="step-bubble">1</div>
+                <span class="step-name">ربط GitHub</span>
+              </div>
+              <div class="step-divider"></div>
+              <div class="step-item" data-step="2">
+                <div class="step-bubble">2</div>
+                <span class="step-name">سيرفر Contabo</span>
+              </div>
+              <div class="step-divider"></div>
+              <div class="step-item" data-step="3">
+                <div class="step-bubble">3</div>
+                <span class="step-name">بصمة SSH</span>
+              </div>
+              <div class="step-divider"></div>
+              <div class="step-item" data-step="4">
+                <div class="step-bubble">4</div>
+                <span class="step-name">المفاتيح والـ Secrets</span>
+              </div>
+              <div class="step-divider"></div>
+              <div class="step-item" data-step="5">
+                <div class="step-bubble">5</div>
+                <span class="step-name">فحص الجاهزية</span>
+              </div>
+            </div>
+
+            <!-- بطاقة محتوى الخطوة النشطة -->
+            <div class="wizard-step-card">
+              <!-- الخطوة 1: ربط GitHub -->
+              <div class="wizard-pane active" id="wizardPane1">
+                <h3>الخطوة 1: ربط حساب ومستودع GitHub</h3>
+                <p class="wizard-pane-desc">اربط حساب GitHub لتفويض تشغيل الـ Workflow وقراءة سجلات النشر بأمان.</p>
+                <div class="form-grid">
+                  <div class="form-group full-width">
+                    <label>GitHub OAuth Client ID</label>
+                    <input id="wizGithubClientId" type="text" placeholder="من تطبيق OAuth المسجل على GitHub">
+                  </div>
+                  <div class="form-group">
+                    <label>مالك المستودع (Owner)</label>
+                    <input id="wizOwner" type="text" value="seedsat1">
+                  </div>
+                  <div class="form-group">
+                    <label>المستودع (Repository)</label>
+                    <input id="wizRepo" type="text" value="saad-studio">
+                  </div>
+                </div>
+                <div class="wizard-pane-actions">
+                  <button id="wizGithubSetup" class="btn btn-primary">بدء تفويض GitHub Device Flow</button>
+                  <button id="wizSaveGithub" class="btn btn-secondary">حفظ ومتابعة</button>
+                </div>
+              </div>
+
+              <!-- الخطوة 2: ربط Contabo -->
+              <div class="wizard-pane" id="wizardPane2">
+                <h3>الخطوة 2: ربط خادم Contabo</h3>
+                <p class="wizard-pane-desc">أدخل عنوان السيرفر والبيانات الأولية اللازمة لتهيئة بيئة التشغيل.</p>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label>عنوان السيرفر (IP)</label>
+                    <input id="wizHost" type="text" value="161.97.77.229" dir="ltr" class="text-left">
+                  </div>
+                  <div class="form-group">
+                    <label>النطاق (Domain)</label>
+                    <input id="wizDomain" type="text" value="saadstudio.app" dir="ltr" class="text-left">
+                  </div>
+                  <div class="form-group">
+                    <label>مستخدم SSH الأولي (Root/Admin)</label>
+                    <input id="wizUser" type="text" placeholder="root">
+                  </div>
+                  <div class="form-group">
+                    <label>كلمة المرور المؤقتة</label>
+                    <input id="wizPassword" type="password" placeholder="تُستخدم للفحص الأولي فقط">
+                  </div>
+                </div>
+              </div>
+
+              <!-- الخطوة 3: التحقق من بصمة SSH -->
+              <div class="wizard-pane" id="wizardPane3">
+                <h3>الخطوة 3: التحقق من بصمة SSH الخادم</h3>
+                <p class="wizard-pane-desc">استخرج بصمة السيرفر وتحقق منها بصيغة SHA256 لحماية اتصالك من الهجمات.</p>
+                <div class="form-group full-width">
+                  <label>بصمة SSH المعروضة بصيغة SHA256:</label>
+                  <div class="input-with-button">
+                    <input id="wizFingerprint" type="text" placeholder="SHA256:..." dir="ltr" class="text-left code-input">
+                    <button id="wizFingerprintCheck" class="btn btn-secondary">استخراج البصمة الآن</button>
+                    <button id="btnCopyWizardFingerprint" class="btn btn-secondary" type="button">نسخ البصمة</button>
+                  </div>
+                </div>
+                <div class="security-notice-box">
+                  <div class="notice-icon">🛡️</div>
+                  <div class="notice-body">
+                    <strong>التحقق المستقل ضروري للأمان:</strong>
+                    <p>لا تعتمد البصمة إلا بعد التأكد من مطابقتها مع ما يظهره خادم Contabo في لوحة التحكم.</p>
+                    <label class="checkbox-container">
+                      <input type="checkbox" id="wizChkVerifyFingerprint">
+                      <span class="checkmark"></span>
+                      <span class="checkbox-label">تحققت من البصمة بشكل مستقل وأريد تثبيتها</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- الخطوة 4: إعداد مفاتيح النشر وGitHub Secrets -->
+              <div class="wizard-pane" id="wizardPane4">
+                <h3>الخطوة 4: إعداد مستخدم النشر saaddeploy والمفاتيح</h3>
+                <p class="wizard-pane-desc">توليد مفتاح Ed25519 محلي وتهيئة مستخدم النشر المحدود في السيرفر.</p>
+                <div class="wizard-sub-actions">
+                  <button id="wizGenerateSsh" class="btn btn-secondary">1. إنشاء مفتاح Ed25519</button>
+                  <button id="wizContaboSetup" class="btn btn-accent">2. تثبيت المفتاح ومستخدم النشر في السيرفر</button>
+                </div>
+                <div class="form-group full-width" style="margin-top: 15px;">
+                  <label>المفتاح العام الناتج (يُضاف أيضاً إلى أسرار GitHub SERVER_SSH_KEY):</label>
+                  <textarea id="wizPublicKeyDisplay" readonly dir="ltr" class="code-textarea" placeholder="المفتاح العام…"></textarea>
+                </div>
+              </div>
+
+              <!-- الخطوة 5: اختبار الجاهزية الشاملة -->
+              <div class="wizard-pane" id="wizardPane5">
+                <h3>الخطوة 5: اختبار الجاهزية الشاملة للنشر</h3>
+                <p class="wizard-pane-desc">التأكد من اكتمال كافة المتطلبات وتفعيل زر النشر الآمن بضغطة واحدة.</p>
+
+                <div class="readiness-checklist">
+                  <div class="check-item" id="wizCheckGithub">
+                    <span class="check-icon">⏳</span>
+                    <span class="check-label">اتصال GitHub وصلاحيات المستودع</span>
+                  </div>
+                  <div class="check-item" id="wizCheckSsh">
+                    <span class="check-icon">⏳</span>
+                    <span class="check-label">إعداد مستخدم Contabo ومفتاح SSH والبصمة</span>
+                  </div>
+                  <div class="check-item" id="wizCheckHealth">
+                    <span class="check-icon">⏳</span>
+                    <span class="check-label">استجابة الموقع المباشر (saadstudio.app)</span>
+                  </div>
+                  <div class="check-item" id="wizCheckWorkflow">
+                    <span class="check-icon">⏳</span>
+                    <span class="check-label">Workflow النشر موجود وقابل للقراءة</span>
+                  </div>
+                  <div class="check-item" id="wizCheckSecrets">
+                    <span class="check-icon">⏳</span>
+                    <span class="check-label">GitHub Secrets المطلوبة موجودة</span>
+                  </div>
+                </div>
+
+                <div class="wizard-final-cta" style="margin-top: 24px; text-align: center;">
+                  <button id="wizBtnTestReadiness" class="btn btn-secondary">إعادة اختبار الجاهزية الآن</button>
+                  <div id="wizReadinessDetails" class="device-flow-status" aria-live="polite">لم يُنفذ الفحص بعد.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- أزرار التنقل بين خطوات المعالج -->
+            <div class="wizard-nav-footer">
+              <button id="wizBtnPrev" class="btn btn-secondary" disabled>السابق</button>
+              <div class="wizard-nav-spacer"></div>
+              <button id="wizBtnSkip" class="btn btn-ghost">تخطي ومغادرة المعالج</button>
+              <button id="wizBtnNext" class="btn btn-primary">التالي</button>
+              <button id="wizBtnFinish" class="btn btn-accent" style="display: none;">إنهاء المعالج والانتقال للوحة التحكم</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- نافذة التأكيد المنبثقة التفاعلية (Confirmation Modal) -->
+  <div id="confirmModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-icon" id="modalIcon">⚠️</div>
+      <h3 id="modalTitle">تأكيد العملية</h3>
+      <p id="modalMessage">هل أنت متأكد من تنفيذ هذا الإجراء؟</p>
+      <div class="modal-actions">
+        <button id="modalBtnCancel" class="btn btn-secondary">إلغاء</button>
+        <button id="modalBtnConfirm" class="btn btn-primary">تأكيد التنفيذ</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

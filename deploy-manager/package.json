@@ -1,0 +1,14 @@
+{
+  "name": "saadstudio-deploy-manager",
+  "version": "2.1.0-repair-wizard",
+  "private": true,
+  "main": "main.cjs",
+  "description": "Secure Windows deployment manager for SaadStudio GitHub Actions",
+  "dependencies": {
+    "blakejs": "^1.2.1",
+    "keytar": "^7.9.0",
+    "ssh2": "^1.16.0",
+    "tweetnacl": "^0.14.5",
+    "tweetnacl-sealed-box": "^1.0.5"
+  }
+}
