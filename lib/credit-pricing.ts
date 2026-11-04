@@ -734,6 +734,39 @@ export async function getVideoCreditsByRouteAsync(modelRoute: string, payload?: 
 }
 
 function getVideoCreditsByRouteFallback(modelRoute: string, payload?: VideoPayload): number {
+  if (modelRoute.startsWith("kwaivgi/kling-v4.0/")) {
+    const outputDuration = Math.min(30, Math.max(3, readDuration(payload, 5)));
+    const quality = readQuality(payload).toLowerCase();
+    const highRate = quality === "1080p";
+    const normalRate = highRate ? 0.235 : 0.157;
+    const countedRate = highRate ? 0.141 : 0.094;
+    const isEdit = modelRoute.endsWith("/video-edit");
+    const hasReferenceVideos = modelRoute.endsWith("/reference-to-video") && countStringList(payload?.videos ?? payload?.reference_videos) > 0;
+    if (!isEdit && !hasReferenceVideos) return parseFloat((outputDuration * normalRate * 1.4 * 40).toFixed(2));
+    const sourceDuration = Math.min(30, Math.max(0, Math.ceil(Number(payload?.source_video_duration ?? payload?.video_duration ?? 0) || 0)));
+    const countedSeconds = Math.min(60, outputDuration + Math.max(outputDuration, sourceDuration));
+    return parseFloat((countedSeconds * countedRate * 1.4 * 40).toFixed(2));
+  }
+  if (modelRoute === "kwaivgi/kling-v2.6-std/motion-control") {
+    const duration = Math.min(30, Math.max(3, readDuration(payload, 3)));
+    return parseFloat((duration * 0.07 * 1.4 * 40).toFixed(2));
+  }
+  if (modelRoute === "wavespeed-ai/openjutsu/object-swap") {
+    const duration = Math.min(15, Math.max(3, readDuration(payload, 3)));
+    const quality = readQuality(payload).toLowerCase();
+    const rate = quality === "1080p" ? 0.40 : quality === "768p" ? 0.20 : quality === "540p" ? 0.17 : 0.15;
+    const referenceFee = typeof payload?.image === "string" && payload.image.trim() ? 0.02 : 0;
+    return parseFloat((duration * rate * 1.4 * 40 + referenceFee * 1.4 * 40).toFixed(2));
+  }
+  if (modelRoute === "wavespeed-ai/video-upscaler" || modelRoute === "wavespeed-ai/ultimate-video-upscaler") {
+    const duration = Math.min(600, Math.max(3, Math.ceil(readDuration(payload, 3))));
+    const quality = readQuality(payload).toLowerCase();
+    const perFive = modelRoute.includes("ultimate")
+      ? ({ "720p": 0.10, "1080p": 0.20, "2k": 0.30, "4k": 0.40 } as const)
+      : ({ "720p": 0.025, "1080p": 0.025, "2k": 0.05, "4k": 0.10 } as const);
+    const perSecond = (perFive[quality as keyof typeof perFive] ?? perFive["1080p"]) / 5;
+    return parseFloat((duration * perSecond * 1.4 * 40).toFixed(2));
+  }
   if (modelRoute.startsWith("minimax/h3") || modelRoute.startsWith("wavespeed-ai/minimax-h3") || modelRoute === "minimax-h3") {
     return getMinimaxH3Credits(payload, undefined, modelRoute);
   }

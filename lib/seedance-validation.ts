@@ -313,7 +313,7 @@ export function validateSeedanceReferences(
 
   let skipImgReject = false;
   if (is25 && isI2V) {
-    skipImgReject = !rawImage && refImages.length === 1;
+    skipImgReject = false;
   } else if (!is25 && isI2V) {
     const availableSlots = (rawImage ? 0 : 1) + (rawLastImage ? 0 : 1);
     skipImgReject = refImages.length > 0 && refImages.length <= availableSlots;
@@ -386,19 +386,19 @@ export function validateSeedanceStartEnd(
     (typeof payload.last_frame_url === "string" && payload.last_frame_url.trim() ? payload.last_frame_url.trim() : null);
 
   if (isI2VFamily) {
-    const startImg = rawImage || refImages[0] || null;
+    const is25I2V = routeKey.startsWith("seedance-2.5/");
+    const startImg = rawImage || (!is25I2V ? refImages[0] : null) || null;
     if (!startImg) {
       throw new SeedanceValidationError(`${routeKey} requires a start image.`);
     }
     exact.image = startImg;
 
-    const endImg = rawLastImage || (refImages.length > 1 ? refImages[1] : null);
+    const endImg = rawLastImage || (!is25I2V && refImages.length > 1 ? refImages[1] : null);
     if (endImg) {
       exact.last_image = endImg;
     }
     return;
   }
-
   if (isT2VFamily || isEditFamily) {
     if (rawImage && !isEditFamily) {
       const currentRefs = (exact.reference_images as string[]) || [];
@@ -490,10 +490,6 @@ export function validateSeedanceResolution(
     "720p";
 
   if (!allowed.includes(rawRes)) {
-    if (routeKey.includes("turbo") && (rawRes === "480p" || rawRes === "4k")) {
-      exact.resolution = "720p";
-      return;
-    }
     throw new SeedanceValidationError(
       `Resolution '${rawRes}' not supported for this route. Allowed: ${allowed.join(", ")}.`,
     );

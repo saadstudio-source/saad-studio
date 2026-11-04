@@ -45,10 +45,10 @@ function VideoEditPageContent() {
   const { guardGeneration, getSafeErrorMessage: getGateError } = useGenerationGate();
   const { addAsset } = useAssetStore();
 
-  // Selected Model: Lock to Gemini Omni Flash
+  // Selected Model: Kling 4.0 official WaveSpeed video-edit endpoint
   const modelFamilyColor = "#06b6d4"; // Cyan-500
-  const modelName = "Gemini Omni Flash";
-  const modelRoute = "google/gemini-omni-flash";
+  const modelName = "Kling 4.0";
+  const modelRoute = "kwaivgi/kling-v4.0/video-edit";
 
   // States
   const [prompt, setPrompt] = useState("");
@@ -87,7 +87,7 @@ function VideoEditPageContent() {
     ].filter((url): url is string => typeof url === "string" && url.trim().length > 0);
     return Array.from(new Set(urls)).slice(0, 3);
   }, [carryoverContext]);
-  const activeModelRoute = carryoverContext?.modelRoute === "google/gemini-omni-flash"
+  const activeModelRoute = carryoverContext?.modelRoute === "kwaivgi/kling-v4.0/video-edit"
     ? carryoverContext.modelRoute
     : modelRoute;
   const activeModelName = carryoverContext?.providerModel || modelName;

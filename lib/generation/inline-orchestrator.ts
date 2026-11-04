@@ -9,6 +9,7 @@ import { decideProviderRoute } from "@/lib/routing/provider-router";
 
 type InlineChargeInput = {
   userId: string;
+  profileId?: string | null;
   credits: number;
   prompt: string;
   assetType: string;
@@ -35,6 +36,8 @@ type InlineChargeInput = {
 export type InlineProviderResult = {
   mediaUrl: string;
   taskId?: string | null;
+  additionalUrls?: string[];
+  responseData?: unknown;
 };
 
 export type InlineOrchestrationResult<TProviderResult extends InlineProviderResult> = {

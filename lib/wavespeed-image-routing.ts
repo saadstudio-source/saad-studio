@@ -57,6 +57,19 @@ export function resolveWaveSpeedImageModelRoute(
   const id = modelId.toLowerCase();
   const wantsMulti = numImages > 1;
 
+  if (id === "gpt-image-2.5-flare-text-to-image" || id === "openai/gpt-image-2.5-flare/text-to-image") {
+    return { model: "openai/gpt-image-2.5-flare/text-to-image", maxReferenceImages: 0, maxOutputImages: 1, inputShape: "aspect-resolution" };
+  }
+  if (id === "gpt-image-2.5-flare-image-to-image" || id === "openai/gpt-image-2.5-flare/edit") {
+    return { model: "openai/gpt-image-2.5-flare/edit", referenceField: "images", requiresReference: true, maxReferenceImages: 16, maxOutputImages: 1, inputShape: "aspect-resolution" };
+  }
+  if (id === "gpt-image-2.5-sunburst-text-to-image" || id === "openai/gpt-image-2.5-sunburst/text-to-image") {
+    return { model: "openai/gpt-image-2.5-sunburst/text-to-image", maxReferenceImages: 0, maxOutputImages: 1, inputShape: "aspect-resolution" };
+  }
+  if (id === "gpt-image-2.5-sunburst-image-to-image" || id === "openai/gpt-image-2.5-sunburst/edit") {
+    return { model: "openai/gpt-image-2.5-sunburst/edit", referenceField: "images", requiresReference: true, maxReferenceImages: 16, maxOutputImages: 1, inputShape: "aspect-resolution" };
+  }
+
   if (id === "seedream/4.5-text-to-image" || id === "bytedance/seedream-v4.5") {
     return {
       model: wantsMulti ? "bytedance/seedream-v4.5/sequential" : "bytedance/seedream-v4.5",
@@ -295,9 +308,11 @@ export function buildWaveSpeedImageInput(
     numImages?: number;
     referenceUrls?: string[];
     negativePrompt?: string | null;
+    outputFormat?: "png" | "jpeg" | "webp";
   },
 ): Record<string, unknown> {
   const requestedQuality = params.quality ?? params.resolution ?? params.imageSize;
+  const requestedResolution = params.resolution ?? params.imageSize ?? "1k";
   const input: Record<string, unknown> = {
     prompt: params.prompt,
     output_format: "jpeg",
@@ -319,8 +334,12 @@ export function buildWaveSpeedImageInput(
   } else if (config.inputShape === "aspect-resolution" || config.inputShape === "seedream-pro") {
     input.aspect_ratio = params.aspectRatio === "auto" ? undefined : params.aspectRatio;
     input.resolution = config.inputShape === "seedream-pro"
-      ? normalizeSeedream5ProResolution(requestedQuality)
-      : String(requestedQuality ?? "1k").trim().toLowerCase();
+      ? normalizeSeedream5ProResolution(requestedResolution)
+      : String(requestedResolution).trim().toLowerCase();
+    if (config.model.includes("gpt-image-2.5")) {
+      input.quality = String(params.quality ?? "medium").trim().toLowerCase();
+      input.output_format = params.outputFormat ?? "png";
+    }
   } else if (config.inputShape === "seedream-lite-size") {
     input.size = normalizeSeedream5LiteSize(requestedQuality);
   } else {

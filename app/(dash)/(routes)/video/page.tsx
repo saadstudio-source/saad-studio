@@ -52,6 +52,8 @@ import { VideoHistoryList, DeleteGenerationDialog } from "@/components/video/Vid
 import { AspectRatioPicker } from "@/components/generation/AspectRatioPicker";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { ModelCapabilityBadges } from "@/components/video/ModelCapabilityBadges";
+import { MotionControlSidebarPanel } from "@/components/video/MotionControlSidebarPanel";
+import { EditVideoSidebarPanel } from "@/components/video/EditVideoSidebarPanel";
 
 // -- Utilities -----------------------------------------------------------------
 
@@ -740,6 +742,24 @@ function usesMinimaxH3PromptReferenceTags(model: WaveSpeedVideoModel): boolean {
   return model.api_route.startsWith("minimax/h3") || model.api_route.startsWith("wavespeed-ai/minimax-h3");
 }
 
+function usesSeedancePromptReferenceTags(model: WaveSpeedVideoModel): boolean {
+  return model.api_route.startsWith("bytedance/seedance-");
+}
+
+function getDefaultDurationForModel(model: WaveSpeedVideoModel): number | null {
+  if (model.api_route.startsWith("bytedance/seedance-2.5") && model.capabilities.durations.includes(5)) return 5;
+  return model.capabilities.durations[0] ?? null;
+}
+
+function getDefaultAspectRatioForModel(model: WaveSpeedVideoModel): string | null {
+  if (model.api_route.startsWith("bytedance/seedance-2.5") && model.capabilities.aspect_ratios.includes("16:9")) return "16:9";
+  return model.capabilities.aspect_ratios?.[0] ?? null;
+}
+
+function getDefaultResolutionForModel(model: WaveSpeedVideoModel): string | null {
+  if (model.api_route.startsWith("bytedance/seedance-2.5") && model.capabilities.resolutions.includes("720p")) return "720p";
+  return model.capabilities.resolutions[0] ?? null;
+}
 function getReferenceFileLimits(model: WaveSpeedVideoModel) {
   const isKling30 = isKling30Route(model.api_route);
   const isWan30 = model.id === "alibaba-wan-3.0-video" || model.api_route.startsWith("alibaba/wan-3.0");
@@ -831,11 +851,14 @@ function getPromptReferenceTagHint(model: WaveSpeedVideoModel): string {
     const joined = parts.length > 0 ? parts.join(", ") : "<Picture 1>";
     return `Minimax H3 references use ${joined}. Assign each reference in the prompt with these exact angle-bracket tags.`;
   }
-  if (limits.images > 0) parts.push(`@Image1..@Image${limits.images}`);
-  if (limits.videos > 0) parts.push(`@Video1..@Video${limits.videos}`);
-  if (limits.audios > 0) parts.push(`@Audio1..@Audio${limits.audios}`);
-  const joined = parts.length > 0 ? parts.join(", ") : "@Image1";
-  return `Reference media supports ${joined}. Audio requires at least one image or video reference.`;
+  const seedanceTags = usesSeedancePromptReferenceTags(model);
+  if (limits.images > 0) parts.push(seedanceTags ? `@image1..@image${limits.images}` : `@Image1..@Image${limits.images}`);
+  if (limits.videos > 0) parts.push(seedanceTags ? `@video1..@video${limits.videos}` : `@Video1..@Video${limits.videos}`);
+  if (limits.audios > 0) parts.push(seedanceTags ? `@audio1..@audio${limits.audios}` : `@Audio1..@Audio${limits.audios}`);
+  const joined = parts.length > 0 ? parts.join(", ") : seedanceTags ? "@image1" : "@Image1";
+  return seedanceTags
+    ? `Reference media supports ${joined}. Keep references in upload order.`
+    : `Reference media supports ${joined}. Audio requires at least one image or video reference.`;
 }
 
 function getPromptReferenceDescriptors(files: File[], promptTagsEnabled: boolean, model?: WaveSpeedVideoModel) {
@@ -843,20 +866,21 @@ function getPromptReferenceDescriptors(files: File[], promptTagsEnabled: boolean
   let videoCount = 0;
   let audioCount = 0;
   const h3Tags = model ? usesMinimaxH3PromptReferenceTags(model) : false;
+  const seedanceTags = model ? usesSeedancePromptReferenceTags(model) : false;
 
   return files.map((file, originalIndex) => {
     if (file.type.startsWith("video/")) {
       videoCount++;
-      const tag = h3Tags ? `<Video ${videoCount}>` : `@Video${videoCount}`;
+      const tag = h3Tags ? `<Video ${videoCount}>` : seedanceTags ? `@video${videoCount}` : `@Video${videoCount}`;
       return { file, originalIndex, kind: "video" as const, tag, label: promptTagsEnabled ? tag : `Video ${videoCount}` };
     }
     if (file.type.startsWith("audio/")) {
       audioCount++;
-      const tag = h3Tags ? `<Audio ${audioCount}>` : `@Audio${audioCount}`;
+      const tag = h3Tags ? `<Audio ${audioCount}>` : seedanceTags ? `@audio${audioCount}` : `@Audio${audioCount}`;
       return { file, originalIndex, kind: "audio" as const, tag, label: promptTagsEnabled ? tag : `Audio ${audioCount}` };
     }
     imageCount++;
-    const tag = h3Tags ? `<Picture ${imageCount}>` : `@Image${imageCount}`;
+    const tag = h3Tags ? `<Picture ${imageCount}>` : seedanceTags ? `@image${imageCount}` : `@Image${imageCount}`;
     return { file, originalIndex, kind: "image" as const, tag, label: promptTagsEnabled ? tag : `Image ${imageCount}` };
   });
 }
@@ -1065,8 +1089,12 @@ const HIDDEN_VIDEO_PAGE_MODEL_IDS = new Set([
 
 function resolveSeedance25Route(baseRoute: string, hasImageInput: boolean, selectedResolution?: string | null): string {
   if (!baseRoute.startsWith("bytedance/seedance-2.5")) return baseRoute;
-  if (baseRoute !== "bytedance/seedance-2.5/text-to-video-turbo") return baseRoute;
   if (!hasImageInput) return baseRoute;
+
+  if (baseRoute === "bytedance/seedance-2.5/text-to-video") {
+    return "bytedance/seedance-2.5/image-to-video";
+  }
+  if (baseRoute !== "bytedance/seedance-2.5/text-to-video-turbo") return baseRoute;
 
   const normalizedResolution = String(selectedResolution || "").trim().toLowerCase();
   if (normalizedResolution === "480p" || normalizedResolution === "4k") {
@@ -1272,6 +1300,23 @@ function VideoPageInner() {
   const { t, lang } = useVideoTranslation();
   const searchParams = useSearchParams();
   const [activeTool,    setActiveTool]    = useState<VideoToolId>("create-video");
+  const [mainWorkflowTab, setMainWorkflowTab] = useState<"create" | "edit" | "motion">("create");
+  const [activeEditTool, setActiveEditTool] = useState<string | null>(null);
+  const [editPanelState, setEditPanelState] = useState<{
+    activeTool: string | null;
+    isReady: boolean;
+    calculatedCredits: number;
+    buttonLabel: string;
+    placeholder: string;
+    isPromptDisabled: boolean;
+    executeGenerate: () => Promise<void>;
+  } | null>(null);
+  const [motionPanelState, setMotionPanelState] = useState<{
+    isReady: boolean;
+    calculatedCredits: number;
+    videoDuration: number;
+    executeGenerate: () => Promise<void>;
+  } | null>(null);
 
   const { videoModels: dynamicVideoList, loading: dynamicLoading } = useFullDynamicModels();
 
@@ -1371,6 +1416,29 @@ function VideoPageInner() {
   }, [allModels, selectedModel.id, selectedModel.api_route]);
 
   useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    if (requestedTab === "edit") {
+      setMainWorkflowTab("edit");
+    } else if (requestedTab === "motion" || requestedTab === "motion-control") {
+      setMainWorkflowTab("motion");
+    } else if (requestedTab === "create") {
+      setMainWorkflowTab("create");
+    }
+
+    const requestedSubTool = searchParams.get("tool");
+    if (requestedSubTool === "object-swap") {
+      setMainWorkflowTab("edit");
+      setActiveEditTool("object-swap");
+    } else if (requestedSubTool === "upscale" || requestedSubTool === "video-upscaler") {
+      setMainWorkflowTab("edit");
+      setActiveEditTool("upscale");
+    } else if (requestedSubTool === "edit-video" || requestedSubTool === "edit") {
+      setMainWorkflowTab("edit");
+      setActiveEditTool("edit-video");
+    } else if (requestedSubTool === "motion-transfer" || requestedSubTool === "motion") {
+      setMainWorkflowTab("motion");
+    }
+
     let requestedTool = resolveVideoTool(searchParams.get("tool"));
     const requestedAudioUrl = searchParams.get("audioUrl");
     if (requestedAudioUrl && /^https?:\/\//i.test(requestedAudioUrl)) {
@@ -1384,10 +1452,10 @@ function VideoPageInner() {
       if (matched) {
         setSelectedModel(matched);
         const c = matched.capabilities;
-        setDuration(c.durations[0] ?? null);
-        setAspectRatio(c.aspect_ratios && c.aspect_ratios.length > 0 ? c.aspect_ratios[0] : null);
+        setDuration(getDefaultDurationForModel(matched));
+        setAspectRatio(getDefaultAspectRatioForModel(matched));
         setSize(c.sizes[0] ?? null);
-        setResolution(c.resolutions[0] ?? null);
+        setResolution(getDefaultResolutionForModel(matched));
       }
     }
 
@@ -1495,7 +1563,34 @@ function VideoPageInner() {
   const [motionVideoDuration, setMotionVideoDuration] = useState<number | null>(null);
   // Detected aspect ratio of the uploaded start frame (Kling 3.0 i2v auto-adapts to this)
   const [startFrameRatio, setStartFrameRatio] = useState<string | null>(null);
-  const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
+  const referencePreviewUrlMapRef = useRef<Map<File, string>>(new Map());
+  const referencePreviews = useMemo(() => {
+    const map = referencePreviewUrlMapRef.current;
+    const active = new Set(referenceImages);
+
+    for (const [file, url] of Array.from(map.entries())) {
+      if (!active.has(file)) {
+        URL.revokeObjectURL(url);
+        map.delete(file);
+      }
+    }
+
+    return referenceImages.map((file) => {
+      if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) return "";
+      const existing = map.get(file);
+      if (existing) return existing;
+      const url = URL.createObjectURL(file);
+      map.set(file, url);
+      return url;
+    });
+  }, [referenceImages]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of Array.from(referencePreviewUrlMapRef.current.values())) URL.revokeObjectURL(url);
+      referencePreviewUrlMapRef.current.clear();
+    };
+  }, []);
   const startFrameRef  = useRef<HTMLInputElement>(null);
   const endFrameRef    = useRef<HTMLInputElement>(null);
   const motionVideoRef = useRef<HTMLInputElement>(null);
@@ -1821,18 +1916,6 @@ function VideoPageInner() {
     setMotionVideoPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [motionVideo]);
-
-  useEffect(() => {
-    if (!referenceImages.length) {
-      setReferencePreviews([]);
-      return;
-    }
-    const urls = referenceImages.map((f) => f.type.startsWith("image/") || f.type.startsWith("video/") ? URL.createObjectURL(f) : "");
-    setReferencePreviews(urls);
-    return () => urls.forEach((u) => {
-      if (u) URL.revokeObjectURL(u);
-    });
-  }, [referenceImages]);
 
   const [referenceVideoDurations, setReferenceVideoDurations] = useState<number[]>([]);
   useEffect(() => {
@@ -2280,7 +2363,7 @@ function VideoPageInner() {
     if (isVeo31FixedEightSecond && duration !== 8) {
       setDuration(8);
     } else if (durationChoices.length > 0 && (duration == null || !durationChoices.includes(duration))) {
-      setDuration(durationChoices.includes(8) ? 8 : durationChoices[0]);
+      setDuration(selectedModel.api_route.startsWith("bytedance/seedance-2.5") && durationChoices.includes(5) ? 5 : durationChoices.includes(8) ? 8 : durationChoices[0]);
     }
 
     if (sound) setSound(false);
@@ -2305,15 +2388,10 @@ function VideoPageInner() {
     setSelectedModel(m);
     setModelOpen(false);
     const c = m.capabilities;
-    setDuration(c.durations[0] ?? null);
-    setAspectRatio(c.aspect_ratios && c.aspect_ratios.length > 0 ? c.aspect_ratios[0] : null);
+    setDuration(getDefaultDurationForModel(m));
+    setAspectRatio(getDefaultAspectRatioForModel(m));
     setSize(c.sizes[0] ?? null);
-    setResolution(c.resolutions[0] ?? null);
-    setStartFrame(null);
-    setLinkedStartFrameUrl(null);
-    setEndFrame(null);
-    setMotionVideo(null);
-    setReferenceImages([]);
+    setResolution(getDefaultResolutionForModel(m));
     setShotType("intelligent");
     setMultiPrompts([""]);
     setElementList([""]);
@@ -3848,6 +3926,77 @@ function VideoPageInner() {
     return out;
   })();
 
+  const effectivePromptPlaceholder = useMemo(() => {
+    if (mainWorkflowTab === "create") {
+      return activeTool === "lipsync"
+        ? t("Lipsync prompt (optional) e.g., talk naturally, smile...")
+        : t("Describe the video you want to create…");
+    }
+    if (mainWorkflowTab === "edit") {
+      return (
+        editPanelState?.placeholder ||
+        (lang === "ar" ? "اختر أداة تحرير من اللوحة الجانبية للبدء..." : "Select an editing tool from the sidebar to begin...")
+      );
+    }
+    if (mainWorkflowTab === "motion") {
+      return lang === "ar"
+        ? "توجيه إضافي اختياري للحركة، الكاميرا، أو الستايل (اختياري)..."
+        : "Optional motion, camera, or style guidance prompt (optional)...";
+    }
+    return t("Describe the video you want to create…");
+  }, [mainWorkflowTab, activeTool, editPanelState, lang, t]);
+
+  const isPromptDisabled = useMemo(() => {
+    if (mainWorkflowTab === "edit") {
+      return Boolean(editPanelState?.isPromptDisabled);
+    }
+    return false;
+  }, [mainWorkflowTab, editPanelState]);
+
+  const effectiveDisplayCredits = useMemo(() => {
+    if (mainWorkflowTab === "create") return estimatedCredits;
+    if (mainWorkflowTab === "edit") return editPanelState?.calculatedCredits ?? 0;
+    if (mainWorkflowTab === "motion") return motionPanelState?.calculatedCredits ?? 0;
+    return estimatedCredits;
+  }, [mainWorkflowTab, estimatedCredits, editPanelState, motionPanelState]);
+
+  const effectiveCanGenerate = useMemo(() => {
+    if (mainWorkflowTab === "create") return canGenerate;
+    if (mainWorkflowTab === "edit") return Boolean(editPanelState?.isReady);
+    if (mainWorkflowTab === "motion") return Boolean(motionPanelState?.isReady);
+    return canGenerate;
+  }, [mainWorkflowTab, canGenerate, editPanelState, motionPanelState]);
+
+  const effectiveButtonLabel = useMemo(() => {
+    if (mainWorkflowTab === "create") {
+      if (videoMode === "extend") return lang === "ar" ? "إطالة الفيديو" : "Extend Video";
+      if (activeTool === "lipsync") return t("Generate Lipsync");
+      return lang === "ar" ? "توليد الفيديو" : "Generate Video";
+    }
+    if (mainWorkflowTab === "edit") {
+      return editPanelState?.buttonLabel || (lang === "ar" ? "تطبيق التعديل" : "Apply Edit");
+    }
+    if (mainWorkflowTab === "motion") {
+      return lang === "ar" ? "توليد نقل الحركة" : "Generate Motion";
+    }
+    return lang === "ar" ? "توليد الفيديو" : "Generate Video";
+  }, [mainWorkflowTab, videoMode, activeTool, editPanelState, lang, t]);
+
+  const handleUnifiedGenerate = useCallback(async () => {
+    if (isSubmitting) return;
+    if (mainWorkflowTab === "create") {
+      await handleGenerate();
+    } else if (mainWorkflowTab === "edit") {
+      if (editPanelState?.executeGenerate) {
+        await editPanelState.executeGenerate();
+      }
+    } else if (mainWorkflowTab === "motion") {
+      if (motionPanelState?.executeGenerate) {
+        await motionPanelState.executeGenerate();
+      }
+    }
+  }, [isSubmitting, mainWorkflowTab, handleGenerate, editPanelState, motionPanelState]);
+
   useEffect(() => {
     if (!supportsCharacterReference && selectedCharacterId) {
       setSelectedCharacterId("");
@@ -4147,15 +4296,14 @@ function VideoPageInner() {
               onKeyDown={e => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleGenerate();
+                  handleUnifiedGenerate();
                 }
               }}
-              placeholder={
-                activeTool === "lipsync"
-                  ? t("Lipsync prompt (optional) e.g., talk naturally, smile...")
-                  : t("Describe the video you want to create…")
-              }
-              className="w-full bg-transparent outline-none text-[13.5px] sm:text-[14px] resize-y min-h-[64px] max-h-[220px] p-1.5 leading-relaxed overflow-y-auto custom-scrollbar"
+              placeholder={effectivePromptPlaceholder}
+              disabled={isPromptDisabled}
+              className={`w-full bg-transparent outline-none text-[13.5px] sm:text-[14px] resize-y min-h-[64px] max-h-[220px] p-1.5 leading-relaxed overflow-y-auto custom-scrollbar ${
+                isPromptDisabled ? "opacity-50 cursor-not-allowed select-none" : ""
+              }`}
               style={{ color: "#f8fafc" }}
             />
 
@@ -4312,14 +4460,17 @@ function VideoPageInner() {
                 </button>
               )}
               <button
-                onClick={handleGenerate}
-                disabled={isSubmitting || !canGenerate}
+                id="video-unified-generate-btn"
+                onClick={handleUnifiedGenerate}
+                disabled={isSubmitting || !effectiveCanGenerate}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-[12.5px] font-semibold transition-all shadow-md"
                 style={{
-                  background: isSubmitting || !canGenerate ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, rgba(6,182,212,0.25), rgba(59,130,246,0.25))",
-                  border: `1px solid ${isSubmitting || !canGenerate ? "rgba(255,255,255,0.06)" : "rgba(6,182,212,0.4)"}`,
-                  color: isSubmitting || !canGenerate ? "#94a3b8" : "#ffffff",
-                  cursor: isSubmitting || !canGenerate ? "not-allowed" : "pointer",
+                  background: isSubmitting || !effectiveCanGenerate
+                    ? "rgba(255,255,255,0.05)"
+                    : "linear-gradient(135deg, rgba(6,182,212,0.85), rgba(37,99,235,0.85))",
+                  border: `1px solid ${isSubmitting || !effectiveCanGenerate ? "rgba(255,255,255,0.06)" : "rgba(6,182,212,0.4)"}`,
+                  color: isSubmitting || !effectiveCanGenerate ? "#94a3b8" : "#ffffff",
+                  cursor: isSubmitting || !effectiveCanGenerate ? "not-allowed" : "pointer",
                 }}
               >
                 {isSubmitting ? (
@@ -4331,10 +4482,10 @@ function VideoPageInner() {
                   <>
                     <Film size={13} className="text-cyan-400" />
                     <span>
-                      {activeTool === "lipsync" ? t("Generate Lipsync") : t("Generate")}
+                      {effectiveButtonLabel}
                       {" · "}
-                      <span style={{ color: isSubmitting || !canGenerate ? "#a1a1aa" : "#fbb11f", fontWeight: 700 }}>
-                        {estimatedCredits} cr
+                      <span style={{ color: isSubmitting || !effectiveCanGenerate ? "#a1a1aa" : "#38bdf8", fontWeight: 700 }}>
+                        {effectiveDisplayCredits} cr
                       </span>
                     </span>
                     {pendingTasks.size > 0 && (
@@ -4352,10 +4503,106 @@ function VideoPageInner() {
 
       {/* -- Right Sidebar --------------------------------------------------- */}
       <aside
-        className="hidden lg:flex flex-shrink-0 flex-col border-l overflow-y-auto"
-        style={{ width: 288, borderColor: "rgba(255,255,255,0.05)", background: "#050a14" }}
+        id="video-settings-sidebar"
+        className="hidden lg:flex flex-shrink-0 flex-col border-l overflow-y-auto w-[400px]"
+        style={{ width: 400, minWidth: 400, maxWidth: 400, borderColor: "rgba(255,255,255,0.05)", background: "#050a14" }}
       >
-        <div className="flex flex-col gap-5 p-4 flex-1">
+        {/* ── Workflow Navigation Tabs (Create Video | Edit Video | Motion Control) ── */}
+        <div className="flex items-center border-b border-white/[0.08] px-3 pt-3 pb-0 justify-between text-[11px] font-semibold select-none flex-shrink-0 bg-[#050a14]">
+          <button
+            type="button"
+            onClick={() => setMainWorkflowTab("create")}
+            className={`pb-2.5 transition-all relative ${
+              mainWorkflowTab === "create" ? "text-white font-bold" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <span>{lang === "ar" ? "توليد فيديو" : "Create Video"}</span>
+            {mainWorkflowTab === "create" && (
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMainWorkflowTab("edit")}
+            className={`pb-2.5 transition-all relative ${
+              mainWorkflowTab === "edit" ? "text-white font-bold" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <span>{lang === "ar" ? "تعديل فيديو" : "Edit Video"}</span>
+            {mainWorkflowTab === "edit" && (
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMainWorkflowTab("motion")}
+            className={`pb-2.5 transition-all relative ${
+              mainWorkflowTab === "motion" ? "text-white font-bold" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <span>{lang === "ar" ? "نقل الحركة" : "Motion Control"}</span>
+            {mainWorkflowTab === "motion" && (
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+            )}
+          </button>
+        </div>
+
+        {mainWorkflowTab === "edit" ? (
+          <div className="p-4 flex-1">
+            <EditVideoSidebarPanel
+              lang={lang === "ar" ? "ar" : "en"}
+              initialTool={activeEditTool}
+              promptText={prompt}
+              isSubmitting={isSubmitting}
+              fetchWithAuth={fetchWithAuth}
+              guardGeneration={guardGeneration}
+              onStateChange={setEditPanelState}
+              onAppendPrompt={(text) => setPrompt(prev => prev ? `${prev}, ${text}` : text)}
+              onTaskCreated={(task) => {
+                if (task.taskId) {
+                  const pendingTaskInfo: PendingTask = {
+                    model: selectedModel,
+                    promptText: task.prompt || "Video Editing Task",
+                    ratio: "16:9",
+                    duration: task.duration || 5,
+                  };
+                  startPolling(task.taskId, pendingTaskInfo);
+                }
+              }}
+              onError={(msg) => setGenerationError(msg)}
+              onSwitchToExtend={() => {
+                setMainWorkflowTab("create");
+                setVideoMode("extend");
+              }}
+            />
+          </div>
+        ) : mainWorkflowTab === "motion" ? (
+          <div className="p-4 flex-1">
+            <MotionControlSidebarPanel
+              lang={lang === "ar" ? "ar" : "en"}
+              promptText={prompt}
+              isSubmitting={isSubmitting}
+              fetchWithAuth={fetchWithAuth}
+              guardGeneration={guardGeneration}
+              onStateChange={setMotionPanelState}
+              onTaskCreated={(task) => {
+                if (task.taskId) {
+                  const pendingTaskInfo: PendingTask = {
+                    model: selectedModel,
+                    promptText: task.prompt || "Motion Control Task",
+                    ratio: "16:9",
+                    duration: task.duration || 5,
+                  };
+                  startPolling(task.taskId, pendingTaskInfo);
+                }
+              }}
+              onError={(msg) => setGenerationError(msg)}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5 p-4 flex-1">
           <ReferenceActionTiles
             hideTiles
             onOpenStudio={(tab) => {
@@ -6881,49 +7128,10 @@ function VideoPageInner() {
             </div>
           )}
 
-          {/* -- Generate button (always visible) ----------------------------- */}
-          <button
-            onClick={handleGenerate}
-            disabled={isSubmitting || !canGenerate}
-            className="w-full py-3 rounded-xl text-[14px] font-semibold transition-all flex items-center justify-center gap-2"
-            style={{
-              background: isSubmitting || !canGenerate
-                ? "rgba(255,255,255,0.05)"
-                : `linear-gradient(135deg, ${hexA(selectedModel.family_color, 0.8)}, ${hexA(selectedModel.family_color, 0.5)})`,
-              border:  `1px solid ${isSubmitting || !canGenerate ? "rgba(255,255,255,0.06)" : hexA(selectedModel.family_color, 0.4)}`,
-              color:   isSubmitting || !canGenerate ? "#94a3b8" : "#fff",
-              cursor:  isSubmitting || !canGenerate ? "not-allowed" : "pointer",
-            }}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 size={15} className="animate-spin" />
-                <span>Sending…</span>
-              </>
-            ) : (
-              <>
-                <Film size={15} />
-                <span>
-                  {videoMode === "extend" ? (lang === "ar" ? "إطالة الفيديو" : "Extend Video") : activeTool === "lipsync" ? "Generate Lipsync" : (lang === "ar" ? "توليد الفيديو" : "Generate Video")} ·{" "}
-                  <span
-                    style={{
-                      color: isSubmitting || !canGenerate ? "#a1a1aa" : "#fbb11f",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {estimatedCredits} cr
-                  </span>
-                </span>
-                {pendingTasks.size > 0 && (
-                  <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 10, padding: "0 6px", fontSize: 11 }}>
-                    {pendingTasks.size} running
-                  </span>
-                )}
-              </>
-            )}
-          </button>
+
 
         </div>
+        )}
       </aside>
 
       {/* ── Media Gallery Picker Modal ─────────────────────────────────── */}
@@ -7528,7 +7736,7 @@ function VideoPageInner() {
                           <div key={idx} className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-white/10 bg-black/40">
                             {f.type.startsWith("image/") ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={URL.createObjectURL(f)} alt="Ref preview" className="w-full h-full object-cover" />
+                              <img src={referencePreviews[idx] || ""} alt="Ref preview" className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white/70">
                                 {f.type.startsWith("video/") ? "VID" : "AUD"}

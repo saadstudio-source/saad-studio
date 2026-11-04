@@ -130,7 +130,6 @@ function payloadHasImageInput(payload: Record<string, unknown>): boolean {
 
 function resolveSeedance25Route(baseRoute: string, payload: Record<string, unknown>): string {
   if (!baseRoute.startsWith("bytedance/seedance-2.5")) return baseRoute;
-  if (baseRoute !== "bytedance/seedance-2.5/text-to-video-turbo") return baseRoute;
 
   const hasExplicitStartImage =
     hasNonEmptyString(payload.first_frame_url) ||
@@ -144,10 +143,10 @@ function resolveSeedance25Route(baseRoute: string, payload: Record<string, unkno
 
   if (!hasExplicitStartImage) return baseRoute;
 
-  const requestedResolution = String(payload.resolution ?? payload.quality ?? payload.mode ?? "").trim().toLowerCase();
-  if (requestedResolution === "480p" || requestedResolution === "4k") {
+  if (baseRoute === "bytedance/seedance-2.5/text-to-video") {
     return "bytedance/seedance-2.5/image-to-video";
   }
+  if (baseRoute !== "bytedance/seedance-2.5/text-to-video-turbo") return baseRoute;
 
   return "bytedance/seedance-2.5/image-to-video-turbo";
 }
@@ -543,9 +542,15 @@ function resolveGoogleVeoProviderModel(modelRoute: string): string {
   if (modelRoute === "google/gemini-omni-flash" || modelRoute === LEGACY_GEMINI_OMNI_VIDEO_ROUTE) return "gemini-omni-1.1-flash";
   return "veo-3.1-generate-preview";
 }
-export function mapToWavespeedInput(payload: Record<string, unknown>, route?: string): Record<string, unknown> {
+function mapToWavespeedInput(payload: Record<string, unknown>, route?: string): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (typeof payload.prompt === "string") out.prompt = payload.prompt;
+  if (typeof payload.video === "string") out.video = payload.video;
+  for (const key of ["target", "mode", "change_to", "character_orientation", "target_resolution"] as const) {
+    if (typeof payload[key] === "string" && payload[key].trim()) out[key] = payload[key].trim();
+  }
+  if (typeof payload.keep_original_sound === "boolean") out.keep_original_sound = payload.keep_original_sound;
+  if (typeof payload.seed === "number" && Number.isInteger(payload.seed)) out.seed = payload.seed;
   if (typeof payload.duration === "number") out.duration = payload.duration;
   else if (typeof payload.duration === "string") out.duration = Number.parseInt(payload.duration, 10);
   if (typeof payload.negative_prompt === "string" && payload.negative_prompt.trim()) {
@@ -639,6 +644,8 @@ export function mapToWavespeedInput(payload: Record<string, unknown>, route?: st
     }
   }
 
+  const isSeedance25TextRoute = route === "bytedance/seedance-2.5/text-to-video";
+  const isSeedance25ImageRoute = route === "bytedance/seedance-2.5/image-to-video";
   const isSeedance25TextTurboRoute = route === "bytedance/seedance-2.5/text-to-video-turbo";
   const isSeedance25TurboImageRoute = route === "bytedance/seedance-2.5/image-to-video-turbo";
   const isSeedance25SpicyImageRoute = route === "bytedance/seedance-2.5/image-to-video-spicy";
@@ -661,8 +668,8 @@ export function mapToWavespeedInput(payload: Record<string, unknown>, route?: st
     route === "kwaivgi/kling-v3-turbo-std/image-to-video" ||
     route === "kwaivgi/kling-v3-turbo-pro/image-to-video";
   const isKlingO3Route = typeof route === "string" && route.startsWith("kwaivgi/kling-video-o3-");
-  const isKling26Route = typeof route === "string" && route.startsWith("kwaivgi/kling-v2.6-");
-  const hasAudio = isSeedance25TextTurboRoute || isSeedance25TurboImageRoute || isSeedance25SpicyImageRoute || isSeedanceBaseImageRoute || route?.includes("seedance-2.0-mini") || isSeedanceTurboImageRoute || isWan30TextRoute || isWan30ImageRoute || isWan30ReferenceRoute || isFlux3Route
+  const isKling26Route = typeof route === "string" && route.startsWith("kwaivgi/kling-v2.6-") && route !== "kwaivgi/kling-v2.6-std/motion-control";
+  const hasAudio = isSeedance25TextRoute || isSeedance25ImageRoute || isSeedance25TextTurboRoute || isSeedance25TurboImageRoute || isSeedance25SpicyImageRoute || isSeedanceBaseImageRoute || route?.includes("seedance-2.0-mini") || isSeedanceTurboImageRoute || isWan30TextRoute || isWan30ImageRoute || isWan30ReferenceRoute || isFlux3Route
     ? payload.generate_audio !== false
     : payload.sound === true || payload.generate_audio === true;
   out.generate_audio = hasAudio;
@@ -2445,7 +2452,7 @@ export async function POST(req: NextRequest) {
           modelRoute = hasDirectStartImage ? "bytedance/seedance-2.0/image-to-video" : "bytedance/seedance-2.0/text-to-video";
         }
       }
-    } else if (modelRoute.includes("kling")) {
+    } else if (modelRoute.includes("kling") && !modelRoute.startsWith("kwaivgi/kling-v4.0/") && modelRoute !== "kwaivgi/kling-v2.6-std/motion-control") {
       const requestedKlingTier = typeof payload?.quality === "string"
         ? payload.quality.toLowerCase()
         : typeof payload?.resolution === "string"
@@ -2536,6 +2543,11 @@ export async function POST(req: NextRequest) {
       modelRoute === "kwaivgi/kling-v3.0-std/text-to-video" ||
       modelRoute === "kwaivgi/kling-v3.0-std/image-to-video" ||
       modelRoute === "kwaivgi/kling-v3.0-pro/image-to-video" ||
+      modelRoute.startsWith("kwaivgi/kling-v4.0/") ||
+      modelRoute === "kwaivgi/kling-v2.6-std/motion-control" ||
+      modelRoute === "wavespeed-ai/openjutsu/object-swap" ||
+      modelRoute === "wavespeed-ai/video-upscaler" ||
+      modelRoute === "wavespeed-ai/ultimate-video-upscaler" ||
       modelRoute === "kwaivgi/kling-v3-turbo-std/image-to-video" ||
       modelRoute === "kwaivgi/kling-v3-turbo-pro/image-to-video" ||
       modelRoute.startsWith("kwaivgi/kling-video-o3-") ||
@@ -2552,7 +2564,7 @@ export async function POST(req: NextRequest) {
 
     const dynamicVideoModels = await getCentralizedDynamicVideoModels();
     let dynamicVideoModel = dynamicVideoModels.find(
-      (m) => (m.api_route === modelRoute || m.id === modelRoute || m.text_api_route === modelRoute || m.image_api_route === modelRoute || m.reference_api_route === modelRoute || (m as any).video_api_route === modelRoute || (m as any).start_end_api_route === modelRoute) && m.isActive !== false
+      (m) => (m.api_route === modelRoute || m.id === modelRoute || m.text_api_route === modelRoute || m.image_api_route === modelRoute || m.reference_api_route === modelRoute || (m as any).video_api_route === modelRoute || (m as any).edit_api_route === modelRoute || (m as any).start_end_api_route === modelRoute) && m.isActive !== false
     );
 
     // Intelligent background sub-route dispatch for unified dynamic models
@@ -2879,7 +2891,7 @@ export async function POST(req: NextRequest) {
       (typeof payload.resolution === "string" ? payload.resolution : null) ||
       (typeof payload.quality === "string" ? payload.quality : null);
     const soundEnabled = payload.sound === true || payload.generate_audio === true;
-    const baseCost = (modelRoute.startsWith("bytedance/seedance") || modelRoute.includes("seedance") || modelRoute.startsWith("wavespeed-ai/minimax-h3") || modelRoute.startsWith("minimax/h3") || modelRoute === "minimax-h3")
+    const baseCost = (modelRoute.startsWith("bytedance/seedance") || modelRoute.includes("seedance") || modelRoute.startsWith("wavespeed-ai/minimax-h3") || modelRoute.startsWith("minimax/h3") || modelRoute === "minimax-h3" || modelRoute.startsWith("kwaivgi/kling-v4.0/") || modelRoute === "kwaivgi/kling-v2.6-std/motion-control" || modelRoute.startsWith("wavespeed-ai/openjutsu/") || modelRoute.startsWith("wavespeed-ai/video-upscaler") || modelRoute.startsWith("wavespeed-ai/ultimate-video-upscaler"))
       ? await getVideoCreditsByRouteAsync(modelRoute, payload)
       : await getGenerationCost(modelRoute, durationForCost, 1, qualityForCost).catch(() => 0);
     const creditsToCharge = baseCost;
@@ -3498,8 +3510,34 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(responseJson, { status: 400 });
       }
       
+      if (wavespeedRoute === "kwaivgi/kling-v2.6-std/motion-control") {
+        if (typeof wsInput.image !== "string" || typeof wsInput.video !== "string") {
+          return NextResponse.json({ error: "Motion Transfer requires both a character image and a motion video." }, { status: 400 });
+        }
+        if (!["image", "video", "front", "side", "back"].includes(String(wsInput.character_orientation || ""))) {
+          return NextResponse.json({ error: "Motion Transfer requires a valid character orientation." }, { status: 400 });
+        }
+      }
+      if (wavespeedRoute === "wavespeed-ai/openjutsu/object-swap") {
+        if (typeof wsInput.video !== "string" || typeof wsInput.target !== "string") {
+          return NextResponse.json({ error: "Object Swap requires a source video and target." }, { status: 400 });
+        }
+        if (wsInput.mode !== undefined && !["change", "background"].includes(String(wsInput.mode))) {
+          return NextResponse.json({ error: "Object Swap mode must be change or background." }, { status: 400 });
+        }
+        if (typeof wsInput.change_to !== "string" && typeof wsInput.image !== "string") {
+          return NextResponse.json({ error: "Object Swap requires change_to or a reference image." }, { status: 400 });
+        }
+      }
+      if (wavespeedRoute === "wavespeed-ai/video-upscaler" || wavespeedRoute === "wavespeed-ai/ultimate-video-upscaler") {
+        if (typeof wsInput.video !== "string") return NextResponse.json({ error: "Video Upscaler requires a source video." }, { status: 400 });
+        if (!["720p", "1080p", "2k", "4k"].includes(String(wsInput.target_resolution || "1080p"))) {
+          return NextResponse.json({ error: "Video Upscaler target resolution must be 720p, 1080p, 2k, or 4k." }, { status: 400 });
+        }
+      }
+
       // Resolve single images/videos/audios
-      for (const key of ["image", "image_url", "end_image", "last_image", "first_frame_url", "last_frame_url"] as const) {
+      for (const key of ["image", "image_url", "video", "end_image", "last_image", "first_frame_url", "last_frame_url"] as const) {
         const mediaValue = wsInput[key];
         if (typeof mediaValue === "string" && mediaValue.trim()) {
           const assetType = getAssetTypeFromKey(key);

@@ -1301,6 +1301,8 @@ export default function ImageWorkspacePage() {
   }, []);
 
   const [quality, setQuality] = useState("standard");
+  const [resolution, setResolution] = useState("1k");
+  const [outputFormat, setOutputFormat] = useState<"png" | "jpeg" | "webp">("png");
   const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionPopupRef = useRef<HTMLDivElement>(null);
@@ -1757,6 +1759,11 @@ export default function ImageWorkspacePage() {
     }
   }, [aspectRatio, selectedModel.aspectRatios]);
 
+  const resolutionOptions = selectedModel.resolutions ?? [];
+  useEffect(() => {
+    if (resolutionOptions.length > 0 && !resolutionOptions.includes(resolution)) setResolution(resolutionOptions[0]);
+  }, [resolution, resolutionOptions]);
+
   const createNeedsImage = selectedModel.inputType === "image-to-image" && Boolean((selectedModel as any).requiresReference) && !(selectedModel as any).text_api_route;
   const selectedCharacter = useMemo(
     () => characters.find((character) => character.id === selectedCharacterId) || null,
@@ -1807,7 +1814,7 @@ export default function ImageWorkspacePage() {
       if (isAnnualUnlimitedCreate) {
         return { placeholder: t("Describe what you want to generate..."), button: t("Generate Image - Unlimited"), promptEnabled: true };
       }
-      const credits = getImageCreditCost(selectedModel, numImages, selectedQuality);
+      const credits = getImageCreditCost(selectedModel, numImages, selectedQuality, resolution, referenceFiles.length);
       return { placeholder: t("Describe what you want to generate..."), button: t("Generate Image") + " - " + creditLabel(credits), promptEnabled: true };
     }
     if (activeTool === "enhance") {
@@ -1823,7 +1830,7 @@ export default function ImageWorkspacePage() {
     }
     if (activeTool === "upscale") return { placeholder: t("Upload media to upscale"), button: t("Upscale Image") + " - " + creditLabel(getImageUtilityCreditCost("upscale", getImageUpscaleTargetResolution(upscaleScale))), promptEnabled: false };
     return { placeholder: t("Upload source face and target above"), button: t("Swap Face") + " - " + creditLabel(getImageUtilityCreditCost("faceSwap")), promptEnabled: false };
-  }, [activeTool, editModels, enhanceModelId, enhanceModels, inpaintModelId, inpaintVariations, isAnnualUnlimitedCreate, numImages, relightVariations, selectedModel, selectedQuality, t, upscaleScale]);
+  }, [activeTool, editModels, enhanceModelId, enhanceModels, inpaintModelId, inpaintVariations, isAnnualUnlimitedCreate, numImages, relightVariations, resolution, selectedModel, selectedQuality, t, upscaleScale]);
 
   useEffect(() => {
     setNumImages(Math.min(Math.max(1, numImages), selectedModel.maxImages));
@@ -1843,7 +1850,7 @@ export default function ImageWorkspacePage() {
   const estimatedCredits = useMemo(() => {
     if (activeTool === "create") {
       if (isAnnualUnlimitedCreate) return 0;
-      return getImageCreditCost(selectedModel, numImages, selectedQuality);
+      return getImageCreditCost(selectedModel, numImages, selectedQuality, resolution);
     }
     if (activeTool === "enhance") {
       const model = enhanceModels.find((entry) => entry.id === enhanceModelId) ?? enhanceModels[0];
@@ -1856,7 +1863,7 @@ export default function ImageWorkspacePage() {
     }
     if (activeTool === "upscale") return getImageUtilityCreditCost("upscale", getImageUpscaleTargetResolution(upscaleScale));
     return getImageUtilityCreditCost("faceSwap");
-  }, [activeTool, editModels, enhanceModelId, enhanceModels, inpaintModelId, inpaintVariations, isAnnualUnlimitedCreate, numImages, relightVariations, selectedModel, selectedQuality, upscaleScale]);
+  }, [activeTool, editModels, enhanceModelId, enhanceModels, inpaintModelId, inpaintVariations, isAnnualUnlimitedCreate, numImages, relightVariations, resolution, selectedModel, selectedQuality, upscaleScale]);
 
   const addResultItems = useCallback((urls: string[], tool: ToolId, model: string, p: string, aspect: string, records?: Partial<ResultItem>[]) => {
     const newItems = urls.map((url, index) => ({
@@ -1924,7 +1931,8 @@ export default function ImageWorkspacePage() {
       aspectRatio,
       numImages,
       quality: activeQuality,
-      resolution: activeQuality,
+      resolution: resolutionOptions.length ? resolution : activeQuality,
+      outputFormat: selectedModel.id.includes("gpt-image-2.5") ? outputFormat : undefined,
       useAnnualUnlimited: isAnnualUnlimitedCreate,
       profileId: currentProfileId,
     };
@@ -2523,6 +2531,22 @@ export default function ImageWorkspacePage() {
             </select>
           </SettingsAccordion>
         ) : null}
+        {resolutionOptions.length ? (
+          <SettingsAccordion label="Resolution" summary={resolution} defaultOpen>
+            <select aria-label="Image resolution" value={resolution} onChange={(e) => setResolution(e.target.value)} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-pink-500">
+              {resolutionOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </SettingsAccordion>
+        ) : null}
+        {selectedModel.id.includes("gpt-image-2.5") ? (
+          <SettingsAccordion label="Output format" summary={outputFormat} defaultOpen={false}>
+            <select aria-label="Image output format" value={outputFormat} onChange={(e) => setOutputFormat(e.target.value as "png" | "jpeg" | "webp")} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-pink-500">
+              <option value="png">PNG</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </SettingsAccordion>
+        ) : null}
 
         {/* ── Gateway card → /image-presets ── */}
         <StyleLibraryGatewayCard onOpen={() => setShowStyleLibrary(true)} />
@@ -2656,21 +2680,62 @@ export default function ImageWorkspacePage() {
   };
 
   const [composerDragActive, setComposerDragActive] = useState(false);
+  const composerDragDepthRef = useRef(0);
 
-  const handleComposerDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  const hasImageFileDrag = useCallback((dataTransfer: DataTransfer | null) => {
+    if (!dataTransfer) return false;
+    const items = Array.from(dataTransfer.items || []);
+    if (items.length > 0) {
+      return items.some((item) => item.kind === "file" && item.type.startsWith("image/"));
+    }
+    return Array.from(dataTransfer.files || []).some((file) => file.type.startsWith("image/"));
+  }, []);
+
+  useEffect(() => {
+    const preventBrowserFileDrop = (event: globalThis.DragEvent) => {
+      if (!hasImageFileDrag(event.dataTransfer)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    };
+
+    window.addEventListener("dragover", preventBrowserFileDrop);
+    window.addEventListener("drop", preventBrowserFileDrop);
+    return () => {
+      window.removeEventListener("dragover", preventBrowserFileDrop);
+      window.removeEventListener("drop", preventBrowserFileDrop);
+    };
+  }, [hasImageFileDrag]);
+
+  const handleComposerDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!hasImageFileDrag(e.dataTransfer)) return;
     e.preventDefault();
     e.stopPropagation();
+    composerDragDepthRef.current += 1;
+    e.dataTransfer.dropEffect = "copy";
+    setComposerDragActive(true);
+  };
+
+  const handleComposerDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!hasImageFileDrag(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
     setComposerDragActive(true);
   };
 
   const handleComposerDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!hasImageFileDrag(e.dataTransfer)) return;
     e.preventDefault();
-    setComposerDragActive(false);
+    e.stopPropagation();
+    composerDragDepthRef.current = Math.max(0, composerDragDepthRef.current - 1);
+    if (composerDragDepthRef.current === 0) setComposerDragActive(false);
   };
 
   const handleComposerDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!hasImageFileDrag(e.dataTransfer)) return;
     e.preventDefault();
     e.stopPropagation();
+    composerDragDepthRef.current = 0;
     setComposerDragActive(false);
     const dropped = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
     const maxRef = selectedModel.maxRefImages;
@@ -2861,14 +2926,11 @@ export default function ImageWorkspacePage() {
             <div
               className={cn("rounded-2xl border p-2 backdrop-blur-xl transition-colors", composerDragActive ? "border-pink-400/60 bg-pink-500/[0.06]" : "border-white/10 bg-black/55")}
               onDragOver={handleComposerDragOver}
-              onDragEnter={handleComposerDragOver}
+              onDragEnter={handleComposerDragEnter}
               onDragLeave={handleComposerDragLeave}
               onDrop={handleComposerDrop}
             >
-              {composerDragActive ? (
-                <div className="mb-2 flex items-center justify-center rounded-xl border border-dashed border-pink-400/50 bg-pink-500/5 py-2 text-xs text-pink-300">{t("Drop images here to add as reference")}</div>
-              ) : (
-                <div className="mb-2 flex items-center gap-2 px-1">
+              <div className="mb-2 flex items-center gap-2 px-1">
                   {/* Film strip: fills the empty run beside the tiles so the row reads as a reel */}
                   <div className="relative min-w-0 flex-1 overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-black via-zinc-900/90 to-black">
                     <div
@@ -3000,8 +3062,16 @@ export default function ImageWorkspacePage() {
                     </button>
                   ) : null}
                 </div>
-              )}
               <div className="relative flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-3 ring-1 ring-white/10 shadow-2xl backdrop-blur-xl">
+                {composerDragActive ? (
+                  <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl border border-dashed border-pink-300/70 bg-slate-950/80 text-center shadow-[0_0_40px_rgba(236,72,153,0.18)] backdrop-blur-sm">
+                    <div className="rounded-2xl border border-pink-300/30 bg-pink-500/10 px-5 py-4 text-sm font-semibold text-pink-100">
+                      <UploadCloud className="mx-auto mb-2 h-6 w-6 text-pink-200" />
+                      {t("Drop images here to add as reference")}
+                      <div className="mt-1 text-xs font-medium text-pink-100/70">{t("Release to attach the image without changing the prompt")}</div>
+                    </div>
+                  </div>
+                ) : null}
                 {/* Floating Mention Autocomplete Popover (Screenshot 5) */}
                 <AnimatePresence>
                   {mentionOpen && filteredMentionItems.length > 0 && (

@@ -33,6 +33,8 @@ export interface ImageModel {
   grokMode?: boolean;
   /** Quality presets sent as a `quality` param (e.g. GPT Image). */
   qualityParam?: string[];
+  /** Exact provider resolution presets exposed separately from quality. */
+  resolutions?: string[];
   /** Provider input field name for reference images:
    * - undefined / "image_url" â†’ single: image_url, multi: image_urls (default)
    * - "image_input" â†’ always array: image_input (Gemini/Nano Banana models)
@@ -88,12 +90,36 @@ const IMAGE_MODEL_QUALITY_CREDIT_MULTIPLIER: Record<string, Record<string, numbe
   "seedream/5-pro-image-to-image": { "1k": 1.0, "2k": 2.0 },
 };
 
-export function getImageCreditCost(_model: ImageModel, numImages = 1, quality?: string | null): number {
+const GPT_IMAGE_25_TEXT_USD: Record<string, Record<string, number>> = {
+  low: { "1k": 0.01, "2k": 0.02, "4k": 0.03 }, medium: { "1k": 0.024, "2k": 0.04, "4k": 0.07 },
+  high: { "1k": 0.09, "2k": 0.15, "4k": 0.27 }, xhigh: { "1k": 0.16, "2k": 0.27, "4k": 0.48 }, max: { "1k": 0.36, "2k": 0.60, "4k": 1.00 },
+};
+const GPT_IMAGE_25_EDIT_USD: Record<string, Record<string, number>> = {
+  low: { "1k": 0.02, "2k": 0.03, "4k": 0.04 }, medium: { "1k": 0.034, "2k": 0.05, "4k": 0.08 },
+  high: { "1k": 0.10, "2k": 0.16, "4k": 0.28 }, xhigh: { "1k": 0.17, "2k": 0.28, "4k": 0.49 }, max: { "1k": 0.37, "2k": 0.61, "4k": 1.01 },
+};
+
+export function getWaveSpeedGptImage25Credits(modelId: string, numImages = 1, quality?: string | null, resolution?: string | null, referenceCount = 0): number {
+  const q = String(quality ?? "medium").toLowerCase();
+  const resValue = String(resolution ?? "1k").toLowerCase();
+  const res = resValue === "4k" ? "4k" : resValue === "2k" ? "2k" : "1k";
+  const isEdit = modelId.includes("image-to-image") || modelId.endsWith("/edit") || modelId.includes("-edit");
+  const table = isEdit ? GPT_IMAGE_25_EDIT_USD : GPT_IMAGE_25_TEXT_USD;
+  const base = table[q]?.[res] ?? table.medium[res];
+  const extraReferenceUsd = isEdit ? Math.max(0, Math.ceil(Number(referenceCount) || 0) - 1) * 0.015 : 0;
+  const units = Math.max(1, Math.ceil(Number(numImages) || 1));
+  return parseFloat(((base + extraReferenceUsd) * 1.4 * 40 * units).toFixed(2));
+}
+
+export function getImageCreditCost(_model: ImageModel, numImages = 1, quality?: string | null, resolution?: string | null, referenceCount = 0): number {
   // MUST stay in sync with the server-side rule in `lib/pricing.ts` (getGenerationCost):
   //   All non-utility image models cost 2 credits at 1k/2k and 4 credits at 4k, per image.
   // The per-model / per-quality multiplier tables above are legacy display data that no
   // longer reflect what the server actually charges — do not reintroduce them here.
   const safeUnits = Math.max(1, Math.ceil(Number(numImages) || 1));
+  if (_model.id.includes("gpt-image-2.5")) {
+    return getWaveSpeedGptImage25Credits(_model.id, safeUnits, quality, resolution, referenceCount);
+  }
   const q = quality?.trim().toLowerCase() ?? "1k";
   const baseRate = q === "4k" ? 4.0 : 2.0;
   return parseFloat((baseRate * safeUnits).toFixed(2));
@@ -467,11 +493,12 @@ export const IMAGE_MODELS: ImageModel[] = [
     badge: "NEW",
     group: "OpenAI Images",
     inputType: "text-to-image",
-    aspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
+    aspectRatios: ["auto", "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "9:21", "21:9"],
     maxImages: 1,
     maxRefImages: 16,
     imageInputField: "images",
-    qualityParam: ["low", "medium", "high"],
+    qualityParam: ["low", "medium", "high", "xhigh", "max"],
+    resolutions: ["1k", "2k", "4k"],
     creditCost: 2.0,
   },
   {
@@ -481,11 +508,12 @@ export const IMAGE_MODELS: ImageModel[] = [
     badge: "NEW",
     group: "OpenAI Images",
     inputType: "image-to-image",
-    aspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
+    aspectRatios: ["auto", "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "9:21", "21:9"],
     maxImages: 1,
     maxRefImages: 16,
     imageInputField: "images",
-    qualityParam: ["low", "medium", "high"],
+    qualityParam: ["low", "medium", "high", "xhigh", "max"],
+    resolutions: ["1k", "2k", "4k"],
     creditCost: 2.0,
   },
   {
@@ -495,11 +523,12 @@ export const IMAGE_MODELS: ImageModel[] = [
     badge: "NEW",
     group: "OpenAI Images",
     inputType: "text-to-image",
-    aspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
+    aspectRatios: ["auto", "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "9:21", "21:9"],
     maxImages: 1,
     maxRefImages: 16,
     imageInputField: "images",
-    qualityParam: ["low", "medium", "high"],
+    qualityParam: ["low", "medium", "high", "xhigh", "max"],
+    resolutions: ["1k", "2k", "4k"],
     creditCost: 2.0,
   },
   {
@@ -509,11 +538,12 @@ export const IMAGE_MODELS: ImageModel[] = [
     badge: "NEW",
     group: "OpenAI Images",
     inputType: "image-to-image",
-    aspectRatios: ["auto", "1:1", "9:16", "16:9", "4:3", "3:4"],
+    aspectRatios: ["auto", "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "9:21", "21:9"],
     maxImages: 1,
     maxRefImages: 16,
     imageInputField: "images",
-    qualityParam: ["low", "medium", "high"],
+    qualityParam: ["low", "medium", "high", "xhigh", "max"],
+    resolutions: ["1k", "2k", "4k"],
     creditCost: 2.0,
   },
   {
