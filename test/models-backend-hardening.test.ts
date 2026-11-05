@@ -417,7 +417,7 @@ describe("Admin Models Backend Hardening Test Suite", () => {
     });
 
     it("strictly enforces reference limits, aspect ratios, resolution allowlists, and exact payload cleanup on server route", async () => {
-      const { mapToWavespeedInput } = await import("@/app/api/video/route");
+      const { mapToWavespeedInput } = await import("@/lib/video/wavespeed-input");
 
       // 1. T2V with > 9 reference images throws ValidationError
       const twentyImages = Array.from({ length: 20 }, (_, i) => `https://example.com/img${i}.jpg`);
@@ -486,7 +486,7 @@ describe("Admin Models Backend Hardening Test Suite", () => {
     });
 
     it("comprehensively validates all 24 Seedance sub-routes across 2.5, Fast, and Mini families", async () => {
-      const { mapToWavespeedInput } = await import("@/app/api/video/route");
+      const { mapToWavespeedInput } = await import("@/lib/video/wavespeed-input");
 
       // 1. Seedance 2.5: image-to-video rejects reference_images and silently removes aspect_ratio
       expect(() =>
@@ -551,7 +551,7 @@ describe("Admin Models Backend Hardening Test Suite", () => {
     });
 
     it("strictly verifies Seedance 2.0 Standard, Fast, Mini, 2.5 and dynamic admin pricing", async () => {
-      const { mapToWavespeedInput } = await import("@/app/api/video/route");
+      const { mapToWavespeedInput } = await import("@/lib/video/wavespeed-input");
       const { computeCreditsFromDynamicModel } = await import("@/lib/pricing");
       const { VIDEO_MODEL_REGISTRY } = await import("@/lib/video-model-registry");
       const { SEEDANCE_INITIAL_PRICING } = await import("@/lib/dynamic-model-loader");
@@ -970,7 +970,7 @@ describe("Admin Models Backend Hardening Test Suite", () => {
       });
 
       it("Seedance 2.5 Text-to-Video handles reference_image_urls without setting image field", async () => {
-        const { mapToWavespeedInput } = await import("@/app/api/video/route");
+        const { mapToWavespeedInput } = await import("@/lib/video/wavespeed-input");
         const exact = mapToWavespeedInput(
           {
             prompt: "Cinematic shot",
@@ -985,7 +985,7 @@ describe("Admin Models Backend Hardening Test Suite", () => {
       });
 
       it("Seedance 2.0 Fast handles reference_image_urls on text route without setting image", async () => {
-        const { mapToWavespeedInput } = await import("@/app/api/video/route");
+        const { mapToWavespeedInput } = await import("@/lib/video/wavespeed-input");
         const exact = mapToWavespeedInput(
           {
             prompt: "Fast motion",

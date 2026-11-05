@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapToWavespeedInput } from "@/app/api/video/route";
+import { mapToWavespeedInput } from "@/lib/video/wavespeed-input";
 
 describe("Start and End Frame Mapping Contracts for WaveSpeed", () => {
   const startImg = "https://f003.backblazeb2.com/file/storage/start.jpg";

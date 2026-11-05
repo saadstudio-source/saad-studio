@@ -266,7 +266,7 @@ describe("Minimax Hailuo Contract and Specification Tests", () => {
     expect(WAVESPEED_VIDEO_FALLBACK_MAP["minimax/hailuo-2.3/i2v-pro"]).toBe("minimax/hailuo-2.3/i2v-pro");
 
     // Test mapToWavespeedInput for Hailuo 02 Pro with start and end image
-    const { mapToWavespeedInput } = await import("@/app/api/video/route");
+    const { mapToWavespeedInput } = await import("@/lib/video/wavespeed-input");
     const wsInput = mapToWavespeedInput({
       prompt: "Cinematic camera movement",
       image: "https://example.com/start.png",
@@ -282,7 +282,7 @@ describe("Minimax Hailuo Contract and Specification Tests", () => {
   });
 
   it("should keep Minimax H3 uploaded reference images as reference media with official prompt tags", async () => {
-    const { mapToWavespeedInput } = await import("@/app/api/video/route");
+    const { mapToWavespeedInput } = await import("@/lib/video/wavespeed-input");
     const refs = Array.from({ length: 8 }, (_, index) => `https://example.com/ref-${index + 1}.png`);
 
     const wsInput = mapToWavespeedInput({
