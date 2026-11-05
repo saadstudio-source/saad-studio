@@ -71,7 +71,7 @@ function pickRollbackTarget(runs) {
 let actionBusy = false;
 async function guarded(button, task) {
   if (actionBusy) { out("توجد عملية قيد التنفيذ؛ انتظر اكتمالها."); return; }
-  actionBusy = true; if (button) button.disabled = true;
+  actionBusy = true; setAuth(authState); if (button) button.disabled = true; // disables BOTH deploy and rollback while one runs
   try { return await task(); } finally { actionBusy = false; if (button) button.disabled = false; setAuth(authState); }
 }
 
