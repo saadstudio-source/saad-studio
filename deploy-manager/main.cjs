@@ -43,7 +43,23 @@ function settingsPath() { return path.join(app.getPath("userData"), "settings.js
 // The repository moved from seedsat1/saad-studio to saadstudio-source/saad-studio: migrate saved settings so the UI/API never use the old owner.
 const OLD_OWNER = "seedsat1";
 function migrateSettings(s) { return s.owner === OLD_OWNER ? { ...s, owner: DEFAULTS.owner } : s; }
-function loadSettings() { try { return migrateSettings({ ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsPath(), "utf8")) }); } catch { return { ...DEFAULTS }; } }
+// The packaged exe uses its own user-data folder; on first run import the (non-secret) settings the dev build saved under %APPDATA%\Electron.
+// SSH key and GitHub token are NOT in that file: they stay in Windows Credential Manager and are shared by service name.
+let legacyImportDone = false;
+function importLegacySettingsOnce() {
+  if (legacyImportDone) return; legacyImportDone = true;
+  try {
+    if (fs.existsSync(settingsPath())) return;
+    const legacy = path.join(app.getPath("appData"), "Electron", "settings.json");
+    if (!fs.existsSync(legacy)) return;
+    const parsed = JSON.parse(fs.readFileSync(legacy, "utf8"));
+    const allowed = ["host", "domain", "user", "fingerprint", "owner", "repo", "workflow", "releaseBranch", "contaboUser", "githubClientId", "wizardStep"];
+    const safe = {}; for (const k of allowed) if (typeof parsed[k] === "string" || typeof parsed[k] === "number") safe[k] = parsed[k];
+    fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
+    fs.writeFileSync(settingsPath(), JSON.stringify(safe, null, 2), { mode: 0o600 });
+  } catch { /* no legacy settings: start with defaults */ }
+}
+function loadSettings() { importLegacySettingsOnce(); try { return migrateSettings({ ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsPath(), "utf8")) }); } catch { return { ...DEFAULTS }; } }
 function saveSettings(input) {
   const current = loadSettings();
   const requestedDeployUser = String(input.contaboUser || current.contaboUser || "saaddeploy").trim();
