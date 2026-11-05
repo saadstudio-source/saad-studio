@@ -20,7 +20,7 @@ const GITHUB_ENVIRONMENT = "Production";
 const DEFAULTS = { host: "161.97.77.229", domain: "saadstudio.app", user: "", fingerprint: "", owner: "saadstudio-source", repo: "saad-studio", workflow: "deploy.yml", releaseBranch: "migration/contabo" };
 const REF_PATTERN = /^[A-Za-z0-9._\/-]{1,120}$/;
 const USER_PATTERN = /^[a-z_][a-z0-9_-]{0,31}$/;
-const READINESS_DEADLINE_MS = 70000;
+const READINESS_DEADLINE_MS = 110000;
 let win;
 let operation = false;
 const auditSessions = new Map();

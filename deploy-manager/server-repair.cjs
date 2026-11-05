@@ -76,7 +76,7 @@ function parseProbe(output) {
   if (kv.image_backup !== "verified") { out.state = "no_verified_backup"; out.message = "لا توجد نسخة صورة Docker احتياطية مُتحقَّق من سلامتها (image_backup=" + (kv.image_backup || "؟") + ")"; return out; }
   out.ok = true; out.state = "verified"; out.message = "preflight ناجح: Docker والحاوية والبيئة والمساحة والنسخة الاحتياطية المُتحقَّق منها"; return out;
 }
-function probeServerReadiness({ host, username, privateKey, fingerprint, timeoutMs = 25000 }) {
+function probeServerReadiness({ host, username, privateKey, fingerprint, timeoutMs = 80000 }) {
   return new Promise((resolve) => {
     const client = new Client(); let done = false;
     const finish = (v) => { if (done) return; done = true; clearTimeout(timer); try { client.end(); } catch {} resolve(v); };

@@ -373,7 +373,7 @@ async function loadAndSyncSettings(options = {}) {
     let check = { ok: false, ssh: { ok: false }, health: { ok: false } };
     let readinessError = "";
     try {
-      check = await withTimeout(window.deployManager.readiness(), 60000, "فحص الجاهزية");
+      check = await withTimeout(window.deployManager.readiness(), 120000, "فحص الجاهزية");
     } catch (e) {
       readinessError = friendlyIpcError(e);
       check = { ok: false, ssh: { ok: false }, health: { ok: false } };
@@ -887,7 +887,7 @@ async function refreshDirectStatus() {
   const box = $("directStatus"); if (!box || !window.deployManager?.directStatus) return;
   box.innerHTML = '<div class="empty-state">جارٍ القراءة (قراءة فقط، لا تغيير على السيرفر)…</div>';
   try {
-    const st = await withTimeout(window.deployManager.directStatus(), 60000, "قراءة حالة السيرفر");
+    const st = await withTimeout(window.deployManager.directStatus(), 120000, "قراءة حالة السيرفر");
     const d = st.probe?.details || {};
     const rows = [
       ["Docker", d.docker || "غير معروف"],
@@ -940,7 +940,7 @@ if ($("deploy")) {
   $("deploy").onclick = async () => {
     try {
       out("جارٍ قراءة آخر إصدار من GitHub وفحص السيرفر…");
-      const plan = await withTimeout(window.deployManager.directPlan(), 60000, "مراجعة النشر");
+      const plan = await withTimeout(window.deployManager.directPlan(), 120000, "مراجعة النشر");
       if (!plan.probe?.ok) { out(`النشر متوقف: السيرفر غير جاهز — ${plan.probe?.message || plan.probe?.state}`); return; }
       const h = plan.head;
       showConfirmModal({
@@ -959,7 +959,7 @@ if ($("deploy")) {
 if ($("rollback")) {
   $("rollback").onclick = async () => {
     try {
-      const plan = await withTimeout(window.deployManager.directPlan(), 60000, "مراجعة التراجع");
+      const plan = await withTimeout(window.deployManager.directPlan(), 120000, "مراجعة التراجع");
       const target = plan.rollbackTarget;
       if (!target) { out("لا يوجد إصدار سابق ناجح مسجّل في البرنامج للتراجع إليه (يلزم نشران ناجحان عبر البرنامج). عند فشل أي نشر يعيد السكربت الإصدار السابق تلقائياً."); return; }
       showConfirmModal({
@@ -1052,7 +1052,7 @@ async function runWizardFinalReadinessCheck() {
   try {
     const started = Date.now();
     out("معالج الإعداد: جارٍ فحص GitHub وWorkflow وSecrets وSSH وصحة الموقع…");
-    const check = await withTimeout(window.deployManager.readiness(), 60000, "فحص الجاهزية");
+    const check = await withTimeout(window.deployManager.readiness(), 120000, "فحص الجاهزية");
     const updateCheckItem = (id, result) => {
       const el = $(id);
       if (!el) return;
