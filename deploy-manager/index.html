@@ -283,6 +283,17 @@
 
           <!-- قسم سجل العمليات الأخير ولوحة الطرفية -->
           <div class="dashboard-split-grid">
+            <!-- حالة السيرفر والإصدار المنشور (النشر المباشر عبر SSH) -->
+            <div class="panel-box" id="directStatusPanel">
+              <div class="panel-header">
+                <div class="panel-title-group"><h2>حالة السيرفر والإصدار المنشور</h2></div>
+                <button id="btnDirectStatus" class="btn btn-ghost btn-sm" title="قراءة فقط: لا يغيّر شيئاً على السيرفر"><span>تحديث الحالة</span></button>
+              </div>
+              <div id="directStatus" class="runs-list"><div class="empty-state">اضغط «تحديث الحالة» لقراءة Docker والحاوية والإصدار المنشور وصحة الموقع.</div></div>
+              <div class="panel-header" style="margin-top:12px"><div class="panel-title-group"><h2>سجلات النشر المحفوظة</h2></div></div>
+              <div id="directLogs" class="runs-list"><div class="empty-state">لا توجد سجلات محفوظة بعد.</div></div>
+            </div>
+
             <!-- قائمة آخر عمليات النشر -->
             <div class="panel-box">
               <div class="panel-header">

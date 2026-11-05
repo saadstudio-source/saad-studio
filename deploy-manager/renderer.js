@@ -378,9 +378,10 @@ async function loadAndSyncSettings(options = {}) {
       readinessError = friendlyIpcError(e);
       check = { ok: false, ssh: { ok: false }, health: { ok: false } };
     }
-    ready = Boolean(check.ok);
-    rollbackReady = Boolean(check.canRollback);
-    const failedParts = ["github", "workflow", "secrets", "ssh", "server", "health"].filter((k) => check[k] && !check[k].ok).map((k) => `${k}: ${check[k].message || check[k].state || "فشل"}`);
+    // النشر المباشر عبر SSH لا يعتمد على GitHub Actions: يلزم GitHub (قراءة الفرع) + SSH + إثبات السيرفر (preflight) + صحة الموقع.
+    ready = Boolean(check.canDirect);
+    rollbackReady = Boolean(check.canDirectRollback);
+    const failedParts = ["github", "ssh", "server", "health"].filter((k) => check[k] && !check[k].ok).map((k) => `${k}: ${check[k].message || check[k].state || "فشل"}`);
     const readinessMessage = readinessError ? `فشل فحص الجاهزية: ${readinessError}` : (ready ? ghStatus.message : `غير جاهز — ${failedParts.join(" | ") || "الفحوص غير مكتملة"}`);
 
     // تحديث بطاقة Contabo
@@ -869,56 +870,107 @@ if ($("wizGithubSetup")) $("wizGithubSetup").onclick = handleGithubDeviceFlow;
 // ============================================================================
 // عمليات النشر والتراجع الآمنة (Deploy & Rollback Handlers)
 // ============================================================================
+// النشر المباشر عبر SSH (بدون GitHub Actions): مراجعة SHA الدقيق ← تأكيد ← تنفيذ مع بث المخرجات ← فحص صحة الموقع.
+let liveBuf = ""; let livePrev = ""; let liveActive = false; let directEventsBound = false;
+function renderLive() { const t = $("output"); if (t) t.textContent = "── مخرجات السيرفر (مباشر) ──\n" + liveBuf.slice(-12000) + "\n────────────\n" + livePrev; }
+function bindDirectEvents() {
+  if (directEventsBound || !window.deployManager?.onDirectEvent) return;
+  directEventsBound = true;
+  window.deployManager.onDirectEvent((e) => {
+    if (e.type === "start") { liveBuf = ""; livePrev = $("output") ? $("output").textContent : ""; liveActive = true; renderLive(); }
+    else if (e.type === "data" && liveActive) { liveBuf += e.text; renderLive(); }
+    else if (e.type === "done") { liveActive = false; }
+  });
+}
+// حالة السيرفر (قراءة فقط) وسجلات النشر المحفوظة
+async function refreshDirectStatus() {
+  const box = $("directStatus"); if (!box || !window.deployManager?.directStatus) return;
+  box.innerHTML = '<div class="empty-state">جارٍ القراءة (قراءة فقط، لا تغيير على السيرفر)…</div>';
+  try {
+    const st = await withTimeout(window.deployManager.directStatus(), 60000, "قراءة حالة السيرفر");
+    const d = st.probe?.details || {};
+    const rows = [
+      ["Docker", d.docker || "غير معروف"],
+      ["الحاوية", d.container || "غير معروف"],
+      ["الإصدار المنشور على السيرفر", st.deployedSha || "غير معروف"],
+      ["آخر نشر ناجح عبر البرنامج", st.lastApp ? `${st.lastApp.sha.slice(0, 8)} (${st.lastApp.at})` : "لا يوجد"],
+      ["صحة الموقع", st.health?.ok ? "سليم (HTTP 200)" : `غير سليم (HTTP ${st.health?.status || "؟"})`],
+      ["نسخة Docker الاحتياطية", d.image_backup || "غير معروف"],
+      ["صورة التراجع", d.rollback_image || "غير معروف"],
+      ["المساحة الحرة", d.disk_free_gb ? `${d.disk_free_gb} GB` : "غير معروف"],
+      ["جاهزية السيرفر", `${st.probe?.state || "؟"} — ${st.probe?.message || ""}${st.busy ? " (عملية نشر جارية)" : ""}`],
+    ];
+    box.innerHTML = rows.map(([k, v]) => `<div class="audit-row"><strong>${escapeHtml(k)}</strong><small>${escapeHtml(String(v))}</small></div>`).join("");
+  } catch (e) { box.innerHTML = `<div class="empty-state">${escapeHtml(friendlyIpcError(e))}</div>`; }
+}
+async function refreshDirectLogs() {
+  const box = $("directLogs"); if (!box || !window.deployManager?.directLogs) return;
+  try {
+    const { files } = await window.deployManager.directLogs();
+    if (!files.length) { box.innerHTML = '<div class="empty-state">لا توجد سجلات محفوظة بعد.</div>'; return; }
+    box.innerHTML = files.map((n) => `<div class="audit-row"><button class="btn btn-ghost btn-xs" data-log="${escapeHtml(n)}">عرض</button><small>${escapeHtml(n)}</small></div>`).join("");
+    box.querySelectorAll("button[data-log]").forEach((b) => { b.onclick = async () => { try { const r = await window.deployManager.directLogRead(b.dataset.log); const t = $("output"); if (t) t.textContent = `── ${r.name} ──\n${r.text}`; } catch (e) { out(friendlyIpcError(e)); } }; });
+  } catch { /* logs are optional */ }
+}
+if ($("btnDirectStatus")) $("btnDirectStatus").onclick = refreshDirectStatus;
+refreshDirectLogs();
+const OUTCOME_TEXT = {
+  success: "✔ اكتمل بنجاح والموقع سليم (HTTP 200).",
+  deployed_unhealthy: "⚠ انتهى السكربت بنجاح لكن فحص صحة الموقع لم ينجح؛ افحص الموقع فوراً.",
+  failed: "✖ فشل. السكربت يعيد الإصدار السابق تلقائياً عند فشل البناء أو الصحة؛ راجع المخرجات أعلاه وحالة الموقع أدناه.",
+  unknown: "؟ انقطع الاتصال أو انتهت المهلة والنتيجة غير مؤكدة؛ قد تكون العملية ما زالت تعمل على السيرفر. لا تعيد التشغيل قبل فحص الحالة.",
+};
+function runDirect(button, action, sha, doneLabel) {
+  return guarded(button, async () => {
+    bindDirectEvents();
+    try {
+      out(`بدء ${doneLabel} عبر SSH للإصدار ${sha.slice(0, 8)}… (قد يستغرق البناء عدة دقائق)`);
+      const res = await window.deployManager.directRun({ action, sha });
+      out(`${OUTCOME_TEXT[res.outcome] || res.outcome}\nالإصدار: ${res.sha}\nرمز الخروج: ${res.exitCode ?? "غير معروف"} | الموقع: HTTP ${res.health?.status || "؟"}${res.error ? "\n" + res.error : ""}`);
+    } catch (e) {
+      liveActive = false;
+      out(`لم تبدأ العملية أو فشلت قبل التنفيذ: ${friendlyIpcError(e)}`);
+    }
+    refreshDirectLogs(); refreshDirectStatus();
+    await loadAndSyncSettings();
+  });
+}
+
 if ($("deploy")) {
-  $("deploy").onclick = () => {
-    showConfirmModal({
-      title: "تأكيد تشغيل Workflow النشر",
-      message: "سيتم إرسال إشارة dispatch إلى GitHub Actions لنشر فرع الإصدار المضبوط في الإعدادات (الافتراضي migration/contabo) إلى خادم Contabo. هل تريد المتابعة؟",
-      icon: "🚀",
-      confirmLabel: "نشر الآن",
-      onConfirm: () => guarded($("deploy"), async () => {
-        try {
-          out("جارٍ إرسال أمر النشر إلى GitHub Actions…");
-          const res = await withTimeout(window.deployManager.dispatch({ action: "deploy" }), 40000, "إرسال النشر");
-          out("تم إرسال طلب النشر بنجاح:\n" + JSON.stringify(res, null, 2));
-          await fetchAndRenderRuns();
-        } catch (e) {
-          out("فشل إرسال النشر: " + friendlyIpcError(e));
-        }
-      })
-    });
+  $("deploy").onclick = async () => {
+    try {
+      out("جارٍ قراءة آخر إصدار من GitHub وفحص السيرفر…");
+      const plan = await withTimeout(window.deployManager.directPlan(), 60000, "مراجعة النشر");
+      if (!plan.probe?.ok) { out(`النشر متوقف: السيرفر غير جاهز — ${plan.probe?.message || plan.probe?.state}`); return; }
+      const h = plan.head;
+      showConfirmModal({
+        title: "تأكيد النشر المباشر عبر SSH",
+        message: `سيتم نشر آخر إصدار من الفرع ${plan.branch}:\n${h.sha}\n«${h.subject}» — ${h.author}\n${plan.lastDeployed ? "المنشور سابقاً عبر البرنامج: " + plan.lastDeployed.sha.slice(0, 8) : "لا يوجد سجل نشر سابق عبر البرنامج"}\nالسيرفر جاهز: preflight ناجح ونسخة Docker احتياطية سليمة. يتراجع تلقائياً إن فشل البناء أو الصحة. متابعة؟`,
+        icon: "🚀",
+        confirmLabel: "نشر الآن",
+        onConfirm: () => runDirect($("deploy"), "deploy", h.sha, "النشر"),
+      });
+    } catch (e) {
+      out("تعذرت مراجعة النشر: " + friendlyIpcError(e));
+    }
   };
 }
 
 if ($("rollback")) {
   $("rollback").onclick = async () => {
     try {
-      const runs = lastKnownRuns.length ? lastKnownRuns : (await withTimeout(window.deployManager.listRuns(), 25000, "قراءة سجل النشر")).runs || [];
-      const target = pickRollbackTarget(runs);
-      const ref = target?.head_sha;
-      if (!ref) {
-        out("لا يوجد إصدار سابق ناجح مسجل (يلزم تشغيلان ناجحان على الأقل) للتراجع إليه.");
-        return;
-      }
-
+      const plan = await withTimeout(window.deployManager.directPlan(), 60000, "مراجعة التراجع");
+      const target = plan.rollbackTarget;
+      if (!target) { out("لا يوجد إصدار سابق ناجح مسجّل في البرنامج للتراجع إليه (يلزم نشران ناجحان عبر البرنامج). عند فشل أي نشر يعيد السكربت الإصدار السابق تلقائياً."); return; }
       showConfirmModal({
-        title: "تأكيد التراجع عن آخر إصدار (Rollback)",
-        message: `سيتم التراجع بالخادم إلى الإصدار السابق (${ref.slice(0, 8)}). هل أنت متأكد؟`,
+        title: "تأكيد التراجع (Rollback) عبر SSH",
+        message: `سيتم التراجع إلى الإصدار السابق:\n${target.sha}\n(نُشر بتاريخ ${target.at}). متأكد؟`,
         icon: "⏪",
         confirmLabel: "تأكيد التراجع",
-        onConfirm: () => guarded($("rollback"), async () => {
-          try {
-            out(`جارٍ إرسال أمر التراجع إلى الإصدار ${ref.slice(0, 8)}…`);
-            const res = await withTimeout(window.deployManager.dispatch({ action: "rollback", ref }), 40000, "إرسال التراجع");
-            out("تم إرسال طلب التراجع بنجاح:\n" + JSON.stringify(res, null, 2));
-            await fetchAndRenderRuns();
-          } catch (e) {
-            out("فشل التراجع: " + friendlyIpcError(e));
-          }
-        })
+        onConfirm: () => runDirect($("rollback"), "rollback", target.sha, "التراجع"),
       });
     } catch (e) {
-      out(e.message);
+      out("تعذرت مراجعة التراجع: " + friendlyIpcError(e));
     }
   };
 }

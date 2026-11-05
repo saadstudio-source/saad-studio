@@ -12,6 +12,6 @@
     "tweetnacl-sealed-box": "^1.0.5"
   },
   "scripts": {
-    "test": "node --test audit-fixes.test.cjs oauth-flow.test.cjs"
+    "test": "node --test audit-fixes.test.cjs oauth-flow.test.cjs direct-deploy.test.cjs"
   }
 }

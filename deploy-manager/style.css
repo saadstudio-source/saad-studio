@@ -1318,3 +1318,5 @@ button:disabled,
 .audit-state.pass { color: #68f3bc; background: rgba(30, 180, 120, .16); }
 .audit-state.fail { color: #ff8d96; background: rgba(220, 60, 80, .16); }
 .audit-state.blocked, .audit-state.warning { color: #ffd26a; background: rgba(220, 150, 30, .16); }
+
+#modalMessage { white-space: pre-line; overflow-wrap: anywhere; }

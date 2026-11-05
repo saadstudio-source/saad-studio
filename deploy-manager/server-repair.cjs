@@ -67,6 +67,8 @@ function parseProbe(output) {
   if (!installed) { out.state = "script_missing"; out.message = "سكربت النشر غير مثبّت على السيرفر"; return out; }
   if (installed !== SCRIPT_HASH) { out.state = "script_outdated"; out.message = "السكربت المثبّت لا يطابق نسخة المستودع (SHA-256)"; return out; }
   if (/password is required|not allowed|may not run sudo|no tty/i.test(output)) { out.state = "sudo_denied"; out.message = "غير موثّق: قاعدة sudoers لا تسمح بـ preflight، فلا يمكن إثبات صلاحية Docker"; return out; }
+  // The script takes the deploy lock before any mode: rc 3 = a deploy is running RIGHT NOW. That is "busy", not a server fault.
+  if (kv.preflight_rc === "3" || /another deployment is running/i.test(output)) { out.state = "busy"; out.message = "عملية نشر أخرى تعمل على السيرفر الآن؛ انتظر اكتمالها (لا يُعاد التشغيل)"; return out; }
   const passed = /PREFLIGHT_OK/.test(output) && kv.preflight_rc === "0";
   out.rollbackReady = /ROLLBACK_READY=yes/.test(output);
   const failing = lines.filter((l) => /FAIL|=missing|=corrupt/.test(l)).join(" | ");

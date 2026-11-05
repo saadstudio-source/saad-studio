@@ -38,7 +38,9 @@ git_repo() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c protocol
 assert_trusted() {
   local p bad
   for p in "$@"; do
-    bad="$(find "$p" '(' ! -user root -o -perm /022 ')' -print -quit 2>/dev/null || echo unreadable)"
+    # Symlinks always report mode 777, so judge them by OWNER only (the script itself creates .env/.env.production links);
+    # every regular file/dir must be root-owned and not group/world-writable.
+    bad="$(find "$p" '(' '(' ! -user root ')' -o '(' ! -type l -perm /022 ')' ')' -print -quit 2>/dev/null || echo unreadable)"
     [[ -z "$bad" ]] || { echo "untrusted ownership/permissions: $bad" >&2; exit 4; }
   done
 }
@@ -70,7 +72,8 @@ if [[ "$ACTION" == preflight ]]; then
   if git_repo ls-remote --heads origin >/dev/null 2>&1; then say "git_remote=ok"; else say "git_remote=FAIL"; fail=1; fi
   newest="$(ls -1t "$ROOT"/backups/saad-studio-local-*.tar.gz 2>/dev/null | head -1 || true)"
   if [[ -z "$newest" ]]; then bk=missing
-  elif pigz -t "$newest" 2>/dev/null && [[ -f "${newest%.tar.gz}.sha256" ]] && sha256sum -c --status "${newest%.tar.gz}.sha256" 2>/dev/null; then bk=verified
+  # The .sha256 file lists a RELATIVE file name, so verify from inside the backups directory (not from the caller's cwd).
+  elif pigz -t "$newest" 2>/dev/null && [[ -f "${newest%.tar.gz}.sha256" ]] && (cd "$(dirname "$newest")" && sha256sum -c --status "$(basename "${newest%.tar.gz}.sha256")") 2>/dev/null; then bk=verified
   else bk=corrupt; fi
   say "image_backup=$bk"
   if docker image inspect saad-studio:rollback-previous >/dev/null 2>&1; then say "rollback_image=present"; else say "rollback_image=absent"; fi

@@ -8,6 +8,10 @@ const { classifyDeviceResponse } = require("./oauth-flow.cjs");
 const { toOpenSshEd25519 } = require("./ssh-key-format.cjs");
 const { runServerAudit } = require("./server-audit.cjs");
 const { getRepairPlan, executeRepairStep, probeServerReadiness } = require("./server-repair.cjs");
+const direct = require("./direct-deploy.cjs");
+// preflight takes the deploy lock, so two probes at once (or one during a manual run) would collide: serialize them and retry briefly on "busy".
+let probeChain = Promise.resolve();
+function probeSerial(conn) { const job = async () => { let r; for (let i = 0; i < 3; i++) { r = await probeServerReadiness(conn); if (r.state !== "busy") break; await new Promise((res) => setTimeout(res, 3000)); } return r; }; const p = probeChain.then(job, job); probeChain = p.catch(() => {}); return p; }
 
 const SERVICE = "SaadStudio Deploy Manager";
 const ACCOUNT = "default";
@@ -158,9 +162,12 @@ async function computeReadiness() {
   let health; try { const hr = await fetch("https://" + s.domain + "/api/health?full=1", { signal: AbortSignal.timeout(8000) }); const body = await hr.json().catch(() => ({})); health = { ok: hr.ok && body.ok !== false, status: hr.status, message: hr.ok ? "HTTP وصحة التطبيق تم التحقق منهما" : "HTTP " + hr.status }; } catch (e) { health = { ok: false, status: 0, message: e.name === "TimeoutError" ? "انتهت مهلة فحص الموقع" : e.message }; }
   // Server-side proof (script hash + root preflight incl. Docker + verified image backup). Never inferred from file existence.
   let server = { ok: false, state: "blocked", message: "يتطلب SSH صالحاً", details: {} };
-  if (ssh.ok && key) { try { server = await probeServerReadiness({ host: s.host, username: s.contaboUser || s.user, privateKey: toOpenSshEd25519(key), fingerprint: normalizeOpenSshFingerprint(s.fingerprint) }); } catch (e) { server = { ok: false, state: "error", message: e.message, details: {} }; } }
+  if (ssh.ok && key) { try { server = await probeSerial({ host: s.host, username: s.contaboUser || s.user, privateKey: toOpenSshEd25519(key), fingerprint: normalizeOpenSshFingerprint(s.fingerprint) }); } catch (e) { server = { ok: false, state: "error", message: e.message, details: {} }; } }
   const canRollback = github.ok && workflow.ok && secrets.ok && ssh.ok && server.ok; // rollback stays possible while the site is down (health not required)
-  return { ok: canRollback && health.ok, canRollback, checkedAt, github, workflow, secrets, ssh, server, health };
+  // Direct-SSH deploy needs only: GitHub token (to read the branch head), pinned SSH, server proven by preflight (+ healthy site for a deploy).
+  const canDirectRollback = ssh.ok && server.ok;
+  const canDirect = github.ok && ssh.ok && server.ok && health.ok;
+  return { ok: canRollback && health.ok, canRollback, canDirect, canDirectRollback, checkedAt, github, workflow, secrets, ssh, server, health };
 }
 // Hard upper bound: the UI always receives a clear verdict, never an endless "evaluating" state.
 ipcMain.handle("deployment:readiness", async () => {
@@ -214,6 +221,71 @@ ipcMain.handle("server:repair:apply", async (_e, input) => {
   if (!input?.approved) throw new Error("لم تتم الموافقة على هذه الخطوة");
   const openSshKey = toOpenSshEd25519(key);
   return executeRepairStep({ host: s.host, username, privateKey: openSshKey, fingerprint: normalizeOpenSshFingerprint(s.fingerprint), stepId: step.id });
+});
+// ---------------------------------------------------------------------------------------------
+// Direct SSH deploy (no GitHub Actions): plan -> user confirms the exact SHA -> run -> health check -> history.
+// ---------------------------------------------------------------------------------------------
+let directRun = false;
+const historyFile = () => path.join(app.getPath("userData"), "deploy-history.json");
+async function sshContext() {
+  const s = loadSettings(); const key = await secret("ssh"); const username = s.contaboUser || s.user;
+  if (!key || !username || !s.fingerprint) throw new Error("أكمل مفتاح SSH ومستخدم النشر وبصمة الخادم أولاً");
+  return { s, username, privateKey: toOpenSshEd25519(key), fingerprint: normalizeOpenSshFingerprint(s.fingerprint) };
+}
+async function fetchBranchHead(s) {
+  const token = await secret("github"); if (!token) throw new Error("أدخل GitHub token في الإعدادات أولاً");
+  const r = await ghFetch(apiUrl(s, `/commits/${s.releaseBranch}`), { headers: ghHeaders(token) }, 10000);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`تعذر قراءة آخر إصدار للفرع ${s.releaseBranch} (HTTP ${r.status}${body.message ? ": " + body.message : ""})`);
+  return direct.parseCommit(body);
+}
+async function siteHealth(s) { const r = await fetch(`https://${s.domain}/api/health?full=1`, { signal: AbortSignal.timeout(8000) }); const body = await r.json().catch(() => ({})); return direct.healthVerdict(r.status, body); }
+const probeBrief = (p) => ({ ok: p.ok, state: p.state, message: p.message, rollbackReady: p.rollbackReady, scriptMatches: p.scriptMatches });
+const logsDir = () => path.join(app.getPath("userData"), "deploy-logs");
+// Read-only status for the dashboard: Docker/container (from the root preflight), deployed version, site health, saved logs.
+ipcMain.handle("direct:status", async () => {
+  const ctx = await sshContext(); const { s } = ctx;
+  const conn = { host: s.host, username: ctx.username, privateKey: ctx.privateKey, fingerprint: ctx.fingerprint };
+  const [probe, cur, health] = await Promise.all([
+    probeSerial(conn),
+    direct.runRemote({ ...conn, command: direct.DEPLOYED_COMMAND, timeoutMs: 15000 }),
+    siteHealth(s).catch((e) => ({ ok: false, status: 0, error: e.message })),
+  ]);
+  const history = direct.readHistory(historyFile());
+  return { probe: { ...probeBrief(probe), details: probe.details }, deployedSha: direct.parseDeployedSha(cur.output), lastApp: history.find((x) => x.ok && x.healthy) || null, health, busy: probe.state === "busy" || directRun };
+});
+ipcMain.handle("direct:logs", async () => ({ files: direct.listLogs(logsDir()) }));
+ipcMain.handle("direct:log-read", async (_e, name) => ({ name: String(name), text: direct.readLog(logsDir(), name) }));
+ipcMain.handle("direct:plan", async () => {
+  const ctx = await sshContext();
+  const [head, probe] = await Promise.all([fetchBranchHead(ctx.s), probeSerial({ host: ctx.s.host, username: ctx.username, privateKey: ctx.privateKey, fingerprint: ctx.fingerprint })]);
+  const history = direct.readHistory(historyFile());
+  return { branch: ctx.s.releaseBranch, head, probe: probeBrief(probe), lastDeployed: history.find((x) => x.ok && x.healthy) || null, rollbackTarget: direct.pickRollbackFromHistory(history), history: history.slice(0, 10) };
+});
+ipcMain.handle("direct:run", async (event, input) => {
+  if (directRun || operation) throw new Error("توجد عملية نشر قيد التنفيذ");
+  const action = String(input?.action || ""); const sha = String(input?.sha || "").toLowerCase();
+  if (!["deploy", "rollback"].includes(action)) throw new Error("عملية غير مسموحة");
+  if (!direct.SHA_PATTERN.test(sha)) throw new Error("يلزم SHA كامل (40 حرفاً)");
+  directRun = true; const emit = (payload) => { try { event.sender.send("direct:event", payload); } catch { /* window closed */ } };
+  try {
+    const ctx = await sshContext(); const { s } = ctx;
+    if (action === "deploy") { const head = await fetchBranchHead(s); if (head.sha !== sha) throw new Error(`الفرع ${s.releaseBranch} تحرّك بعد المراجعة (الآن ${head.sha.slice(0, 8)})؛ أعد المراجعة قبل النشر`); }
+    const probe = await probeSerial({ host: s.host, username: ctx.username, privateKey: ctx.privateKey, fingerprint: ctx.fingerprint });
+    const usable = action === "deploy" ? probe.ok : (probe.scriptMatches && !["sudo_denied", "script_missing", "script_outdated", "timeout", "error"].includes(probe.state));
+    if (!usable) throw new Error("السيرفر غير جاهز: " + (probe.message || probe.state));
+    const command = direct.buildRemoteCommand(action, sha);
+    emit({ type: "start", action, sha, at: new Date().toISOString() });
+    const result = await direct.runRemote({ host: s.host, username: ctx.username, privateKey: ctx.privateKey, fingerprint: ctx.fingerprint, command, onData: (text) => emit({ type: "data", text }) });
+    let health = { ok: false, status: 0 };
+    if (result.state === "finished" || result.state === "disconnected" || result.state === "timeout") health = await direct.waitForHealth(() => siteHealth(s), { attempts: result.ok ? 12 : 3 });
+    const outcome = result.ok && health.ok ? "success" : result.ok ? "deployed_unhealthy" : result.state === "finished" ? "failed" : "unknown";
+    if (result.state === "finished" || outcome === "unknown") direct.appendHistory(historyFile(), { sha, action, ok: result.ok, healthy: health.ok });
+    try { direct.saveLog(logsDir(), { action, sha, outcome, output: result.output, exitCode: result.code, health }); } catch { /* logging must never break a deploy report */ }
+    const summary = { outcome, action, sha, exitCode: result.code, remoteState: result.state, health, error: result.error || "" };
+    emit({ type: "done", ...summary });
+    return summary;
+  } finally { directRun = false; }
 });
 ipcMain.handle("contabo:fingerprint", async (_e, input) => { const s = loadSettings(); const password = String(input?.password || ""); const username = String(input?.user || s.user || "").trim(); if (!username || !password) throw new Error("أدخل مستخدم SSH وكلمة المرور الأولية أولاً"); return sshExec({ host: s.host, username, password, command: "printf fingerprint-check", captureFingerprint: true }); });
 ipcMain.handle("contabo:setup", async (_e, input) => { const s = loadSettings(); const expected = String(input?.fingerprint || "").trim(); const bootstrapUser = String(input?.user || s.user || "").trim(); const password = String(input?.password || ""); const deployUser = s.contaboUser || "saaddeploy"; if (!USER_PATTERN.test(deployUser)) throw new Error("اسم مستخدم النشر غير صالح"); const publicKey = await secret("ssh-public"); if (!bootstrapUser || !password || !/^SHA256:[A-Za-z0-9+/=]+$/.test(expected) || !publicKey) throw new Error("أكمل مستخدم SSH وكلمة المرور والبصمة وأنشئ مفتاح Ed25519 أولاً"); const safeKey = publicKey.replace(/'/g, "'\\''"); const command = `set -eu; id -u ${deployUser} >/dev/null 2>&1 || useradd --create-home --shell /bin/bash ${deployUser}; install -d -m 700 -o ${deployUser} -g ${deployUser} /home/${deployUser}/.ssh; printf '%s\\n' '${safeKey}' > /home/${deployUser}/.ssh/authorized_keys; chown ${deployUser}:${deployUser} /home/${deployUser}/.ssh/authorized_keys; chmod 600 /home/${deployUser}/.ssh/authorized_keys; install -d -m 755 /opt/saadstudio/bin /opt/saadstudio/repository /opt/saadstudio/releases; chown ${deployUser}:${deployUser} /opt/saadstudio/repository /opt/saadstudio/releases; printf setup-ok`; const result = await sshExec({ host: s.host, username: bootstrapUser, password, fingerprint: expected, command }); if (result.output.trim() !== "setup-ok") throw new Error("لم يؤكد السيرفر اكتمال الإعداد"); saveSettings({ user: bootstrapUser, fingerprint: expected }); return { ok: true, state: "provisioned", deployUser }; });

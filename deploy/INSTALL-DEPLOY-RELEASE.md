@@ -56,3 +56,16 @@ rm -f /etc/sudoers.d/saaddeploy /opt/saadstudio/bin/deploy-release
 - `fetch` / `worktree add` write refs and worktree metadata into `/opt/saad-studio/.git`. Set `REPO_DIR` to a dedicated root-owned clone if you want the live checkout untouched.
 - Do not run it at the same time as the manual (PM2) deployment.
 - The GitHub workflow runs: validate → deploy-manager-tests + site tests (verify) + integration → deploy. A deploy is only started from Deploy Manager / workflow_dispatch; installing the script does not start one.
+
+## One-command safe install (recommended; replaces steps 1-3 above)
+Run as root. Both files are first copied into a NEW root-only directory and their hashes are verified there; the installer then runs
+from that copy, works only on a private root-owned copy of the script, refuses symlinked/insecure paths, backs up the current script
++ sudoers (timestamped), installs atomically, runs tests (hash/mode, `visudo -c`, no `ALL` in sudo rules, argument-validation exit
+codes, read-only `preflight`, container state unchanged) and **restores the previous versions automatically if any test fails**
+(also on Ctrl-C / SSH drop). It never deploys, rolls back, restarts or modifies a container/service. Set `STRICT_PREFLIGHT=1` to also
+restore when preflight reports failures (default: keep the complete tested install and exit 3 with the failing lines).
+```bash
+D=$(mktemp -d /root/dr-install.XXXXXX) && cp /home/saaddeploy/staging-preflight/install-deploy-release-root.sh /home/saaddeploy/staging-preflight/deploy-release.preflight "$D"/ && cd "$D" && printf '%s  %s
+' <INSTALLER_SHA256> install-deploy-release-root.sh <SCRIPT_SHA256> deploy-release.preflight | sha256sum -c - && STAGED="$D/deploy-release.preflight" EXPECTED_SHA=<SCRIPT_SHA256> bash "$D/install-deploy-release-root.sh"
+```
+Undo (exact files, printed at the end): `cp -p /opt/saadstudio/backups/deploy-release.old-<TS> /opt/saadstudio/bin/deploy-release; cp -p /opt/saadstudio/backups/sudoers-saaddeploy.old-<TS> /etc/sudoers.d/saaddeploy; visudo -c`
