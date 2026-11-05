@@ -13,7 +13,8 @@ const CHECKS = [
   ["deploy-script", "سكربت النشر والتراجع", "if test -f /opt/saadstudio/bin/deploy-release; then stat -c '%n owner=%U mode=%a executable=%A' /opt/saadstudio/bin/deploy-release; sed -n '1,220p' /opt/saadstudio/bin/deploy-release | grep -E '^(#!/|RELEASE|rollback|deploy|ln |mv |cp |rm |docker|systemctl|health|curl)' | head -100; else echo 'Deployment script missing'; exit 24; fi"],
   ["releases", "الإصدارات والنسخ الاحتياطية", "for p in /opt/saadstudio/releases /opt/saadstudio/backups /var/backups/saadstudio; do if test -d \"$p\"; then echo \"[$p]\"; find \"$p\" -maxdepth 1 -mindepth 1 -printf '%f %y %TY-%Tm-%Td\\n' 2>/dev/null | sort -r | head -30; else echo \"missing=$p\"; fi; done"],
   ["conflicts", "تعارض المنافذ 3000 و3002", "ss -lntp 2>/dev/null | grep -E ':(3000|3002)\\b' || echo 'ports 3000/3002 not listening'"],
-  ["workflow", "مطابقة Workflow مع الخادم", "test -x /opt/saadstudio/bin/deploy-release && echo 'deploy-script executable'; test -d /opt/saadstudio/releases && echo 'releases-directory present'; grep -Ril 'saadstudio' /opt/saadstudio 2>/dev/null | head -20"],
+  ["workflow", "مطابقة Workflow مع الخادم (سكربت قابل للتنفيذ + قاعدة sudoers)", "test -x /opt/saadstudio/bin/deploy-release || { echo 'deploy-release missing or not executable'; exit 24; }; sudo -n -l 2>&1 | grep -q 'deploy-release' && echo 'deploy-script executable; sudoers rule present' || { echo 'no sudoers rule for deploy-release'; exit 25; }"],
+  ["preflight", "preflight بصلاحية root (Docker والحاوية والبيئة والمساحة والنسخة الاحتياطية)", "out=$(sudo -n /opt/saadstudio/bin/deploy-release preflight 2>&1); rc=$?; printf '%s\n' \"$out\" | head -30; exit $rc"],
 ];
 function normalizeFingerprint(value) {
   const text = String(value || "").trim();
@@ -52,6 +53,18 @@ function runCommand(client, command, timeoutMs, cancelled) {
   });
 }
 function applyEvidenceSemantics(key, result) {
+  if (key === "docker") {
+    const text = `${result.stdout || ""}
+${result.stderr || ""}`;
+    if (/permission denied/i.test(text)) return { ...result, ok: false, state: "BLOCKED", message: "لا وصول Docker مباشر لـ saaddeploy (مقصود، بلا docker group). صلاحية Docker الفعلية لا تُعتبر ناجحة إلا عبر فحص preflight" };
+  }
+  if (key === "preflight") {
+    const text = `${result.stdout || ""}
+${result.stderr || ""}`;
+    if (/password is required|not allowed|may not run sudo/i.test(text)) return { ...result, ok: false, state: "BLOCKED", message: "قاعدة sudoers لا تسمح بـ preflight بعد؛ Docker وجاهزية التراجع غير مُثبتتين" };
+    if (result.ok && /PREFLIGHT_OK/.test(text) && /image_backup=verified/.test(text)) return { ...result, state: "PASS", message: "preflight ناجح مع نسخة صورة احتياطية سليمة" };
+    if (result.ok) return { ...result, ok: false, state: "WARNING", message: "preflight ناجح لكن لا توجد نسخة احتياطية للصورة مُتحقَّق منها" };
+  }
   if (key === "releases") {
     const text = `${result.stdout || ""}\n${result.stderr || ""}`;
     if (/missing=\/opt\/saadstudio\/backups|missing=\/var\/backups\/saadstudio/.test(text)) return { ...result, state: "WARNING", ok: false, message: "لم تثبت نسخ احتياطية فعلية؛ توجد مسارات مفقودة" };

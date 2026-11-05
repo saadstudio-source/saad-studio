@@ -6,10 +6,14 @@ set -euo pipefail
 # (see deploy/saaddeploy-sudoers.example) so that `saaddeploy` itself never gets a root
 # shell or Docker group membership. It accepts only two allowlisted arguments and never
 # evaluates shell supplied by the caller.
-[[ $# -eq 2 ]] || { echo "usage: deploy-release <deploy|rollback> <ref>" >&2; exit 2; }
-ACTION="$1"; REF="$2"
-[[ "$ACTION" == "deploy" || "$ACTION" == "rollback" ]] || { echo "invalid action" >&2; exit 2; }
-[[ "$REF" =~ ^[A-Za-z0-9._/-]{1,120}$ && "$REF" != -* && "$REF" != *..* ]] || { echo "invalid ref" >&2; exit 2; }
+if [[ $# -eq 1 && "$1" == preflight ]]; then
+  ACTION=preflight; REF=""            # read-only readiness probe: builds, fetches and changes nothing
+else
+  [[ $# -eq 2 ]] || { echo "usage: deploy-release <deploy|rollback> <ref> | preflight" >&2; exit 2; }
+  ACTION="$1"; REF="$2"
+  [[ "$ACTION" == "deploy" || "$ACTION" == "rollback" ]] || { echo "invalid action" >&2; exit 2; }
+  [[ "$REF" =~ ^[A-Za-z0-9._/-]{1,120}$ && "$REF" != -* && "$REF" != *..* ]] || { echo "invalid ref" >&2; exit 2; }
+fi
 
 ROOT=/opt/saadstudio
 # Releases are built from a ROOT-OWNED checkout and stored in a ROOT-OWNED directory, so the
@@ -51,6 +55,28 @@ ENV_FILE="${ENV_FILE:-$LIVE/.env.production}"
 assert_dir_chain "$REPO"; assert_dir_chain "$RELEASES"
 assert_trusted "$REPO/.git" "$RELEASES"
 command -v docker >/dev/null || { echo "docker not available" >&2; exit 4; }
+
+if [[ "$ACTION" == preflight ]]; then
+  # Evidence, not file existence: every line below comes from actually running the check as root.
+  fail=0; say() { printf '%s\n' "$*"; }
+  say "env_file=ok"; say "tree_trusted=ok"      # both asserted above (script exits 4 otherwise)
+  if docker info >/dev/null 2>&1; then say "docker=ok"; else say "docker=FAIL"; fail=1; fi
+  P="$(docker ps --filter publish=3000 --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | head -1)"
+  C="$(docker ps --filter publish=3000 --format '{{.Names}}' 2>/dev/null | head -1)"
+  if [[ "$P" == saad-studio && "$C" == saad-studio-app-1 ]]; then say "container=ok($C)"; else say "container=FAIL(project=${P:-none} name=${C:-none})"; fail=1; fi
+  free_gb="$(df --output=avail -BG / | tail -1 | tr -dc 0-9)"
+  if [[ "${free_gb:-0}" -ge 10 ]]; then say "disk_free_gb=${free_gb}"; else say "disk_free_gb=${free_gb:-0} FAIL(<10)"; fail=1; fi
+  say "swap_mb=$(free -m | awk '/^Swap:/{print $2}')"
+  if git_repo ls-remote --heads origin >/dev/null 2>&1; then say "git_remote=ok"; else say "git_remote=FAIL"; fail=1; fi
+  newest="$(ls -1t "$ROOT"/backups/saad-studio-local-*.tar.gz 2>/dev/null | head -1 || true)"
+  if [[ -z "$newest" ]]; then bk=missing
+  elif pigz -t "$newest" 2>/dev/null && [[ -f "${newest%.tar.gz}.sha256" ]] && sha256sum -c --status "${newest%.tar.gz}.sha256" 2>/dev/null; then bk=verified
+  else bk=corrupt; fi
+  say "image_backup=$bk"
+  if docker image inspect saad-studio:rollback-previous >/dev/null 2>&1; then say "rollback_image=present"; else say "rollback_image=absent"; fi
+  if [[ "$fail" -eq 0 && "$bk" == verified ]]; then say "ROLLBACK_READY=yes"; else say "ROLLBACK_READY=no"; fi
+  if [[ "$fail" -eq 0 ]]; then say "PREFLIGHT_OK"; exit 0; else say "PREFLIGHT_FAIL"; exit 6; fi
+fi
 
 PREVIOUS=""
 if [[ -L "$CURRENT" ]]; then PREVIOUS="$(readlink -f "$CURRENT")"; fi

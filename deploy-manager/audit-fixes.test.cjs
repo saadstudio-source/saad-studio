@@ -36,3 +36,15 @@ test("repair plan never escalates to root or touches docker group", () => {
   const write = plan.filter((s) => s.mode === "write");
   assert.ok(write.every((s) => s.requiresApproval));
 });
+
+const { parseProbe, getScriptHash } = require("./server-repair.cjs");
+test("server readiness is never granted from file existence or forged output", () => {
+  const H = getScriptHash(); const ok = (s) => parseProbe(s).ok;
+  assert.strictEqual(ok("installed_sha=\npreflight_rc=1"), false);                                            // script missing
+  assert.strictEqual(ok("installed_sha=" + "a".repeat(64) + "\npreflight_rc=0\nPREFLIGHT_OK\nimage_backup=verified"), false); // wrong hash
+  assert.strictEqual(ok("installed_sha=" + H + "\npreflight_rc=1\nsudo: a password is required"), false);     // sudoers lacks preflight
+  assert.strictEqual(ok("installed_sha=" + H + "\npreflight_rc=6\ndocker=FAIL\nPREFLIGHT_FAIL"), false);       // docker failing
+  assert.strictEqual(ok("installed_sha=" + H + "\npreflight_rc=0\nPREFLIGHT_OK\nimage_backup=missing"), false); // no verified backup
+  assert.strictEqual(ok("installed_sha=" + H + "\nPREFLIGHT_OK\nimage_backup=verified"), false);              // no exit code => forged
+  assert.strictEqual(ok("installed_sha=" + H + "\npreflight_rc=0\ndocker=ok\nimage_backup=verified\nPREFLIGHT_OK"), true);
+});

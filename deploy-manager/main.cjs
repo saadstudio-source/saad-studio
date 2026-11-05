@@ -7,16 +7,16 @@ const { Client } = require("ssh2");
 const { classifyDeviceResponse } = require("./oauth-flow.cjs");
 const { toOpenSshEd25519 } = require("./ssh-key-format.cjs");
 const { runServerAudit } = require("./server-audit.cjs");
-const { getRepairPlan, executeRepairStep } = require("./server-repair.cjs");
+const { getRepairPlan, executeRepairStep, probeServerReadiness } = require("./server-repair.cjs");
 
 const SERVICE = "SaadStudio Deploy Manager";
 const ACCOUNT = "default";
 const GITHUB_ENVIRONMENT = "Production";
 // releaseBranch = the branch GitHub dispatches the workflow on. deploy.yml currently exists only on migration/contabo.
-const DEFAULTS = { host: "161.97.77.229", domain: "saadstudio.app", user: "", fingerprint: "", owner: "seedsat1", repo: "saad-studio", workflow: "deploy.yml", releaseBranch: "migration/contabo" };
+const DEFAULTS = { host: "161.97.77.229", domain: "saadstudio.app", user: "", fingerprint: "", owner: "saadstudio-source", repo: "saad-studio", workflow: "deploy.yml", releaseBranch: "migration/contabo" };
 const REF_PATTERN = /^[A-Za-z0-9._\/-]{1,120}$/;
 const USER_PATTERN = /^[a-z_][a-z0-9_-]{0,31}$/;
-const READINESS_DEADLINE_MS = 45000;
+const READINESS_DEADLINE_MS = 70000;
 let win;
 let operation = false;
 const auditSessions = new Map();
@@ -36,7 +36,10 @@ const rawIpcHandle = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (channel, listener) => rawIpcHandle(channel, (event, ...args) => { assertTrustedSender(event); return listener(event, ...args); });
 
 function settingsPath() { return path.join(app.getPath("userData"), "settings.json"); }
-function loadSettings() { try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsPath(), "utf8")) }; } catch { return { ...DEFAULTS }; } }
+// The repository moved from seedsat1/saad-studio to saadstudio-source/saad-studio: migrate saved settings so the UI/API never use the old owner.
+const OLD_OWNER = "seedsat1";
+function migrateSettings(s) { return s.owner === OLD_OWNER ? { ...s, owner: DEFAULTS.owner } : s; }
+function loadSettings() { try { return migrateSettings({ ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsPath(), "utf8")) }); } catch { return { ...DEFAULTS }; } }
 function saveSettings(input) {
   const current = loadSettings();
   const requestedDeployUser = String(input.contaboUser || current.contaboUser || "saaddeploy").trim();
@@ -153,12 +156,15 @@ async function computeReadiness() {
   const ssh = { ok: false, state: "missing", message: "مفتاح أو مستخدم أو بصمة غير مكتملة" };
   if (key && (s.contaboUser || s.user) && s.fingerprint) await new Promise((resolve) => { const c = new Client(); const username = s.contaboUser || s.user; const timer = setTimeout(() => { c.end(); ssh.state = "timeout"; ssh.message = "انتهت مهلة اتصال SSH"; resolve(); }, 10000); let openSshKey; try { openSshKey = toOpenSshEd25519(key); } catch (e) { ssh.state = "invalid"; ssh.message = e.message; clearTimeout(timer); resolve(); return; } c.on("ready", () => { c.exec("printf saadstudio-ssh-ok", (err, stream) => { if (err) { clearTimeout(timer); c.end(); ssh.state = "error"; ssh.message = err.message; resolve(); return; } let out = ""; stream.on("data", (b) => { out += b.toString(); }); stream.on("close", () => { clearTimeout(timer); c.end(); ssh.ok = out === "saadstudio-ssh-ok"; ssh.state = ssh.ok ? "verified" : "error"; ssh.message = ssh.ok ? "تم اختبار SSH فعلياً" : "فشل إثبات صلاحية المستخدم"; resolve(); }); }); }).on("error", (e) => { clearTimeout(timer); ssh.state = "error"; ssh.message = e.message; resolve(); }).connect({ host: s.host, port: 22, username, privateKey: openSshKey, readyTimeout: 8000, hostHash: "sha256", hostVerifier: (hash) => normalizeOpenSshFingerprint(hash) === normalizeOpenSshFingerprint(s.fingerprint) }); });
   let health; try { const hr = await fetch("https://" + s.domain + "/api/health?full=1", { signal: AbortSignal.timeout(8000) }); const body = await hr.json().catch(() => ({})); health = { ok: hr.ok && body.ok !== false, status: hr.status, message: hr.ok ? "HTTP وصحة التطبيق تم التحقق منهما" : "HTTP " + hr.status }; } catch (e) { health = { ok: false, status: 0, message: e.name === "TimeoutError" ? "انتهت مهلة فحص الموقع" : e.message }; }
-  const canRollback = github.ok && workflow.ok && secrets.ok && ssh.ok; // rollback must stay possible while the site is down
-  return { ok: canRollback && health.ok, canRollback, checkedAt, github, workflow, secrets, ssh, health };
+  // Server-side proof (script hash + root preflight incl. Docker + verified image backup). Never inferred from file existence.
+  let server = { ok: false, state: "blocked", message: "يتطلب SSH صالحاً", details: {} };
+  if (ssh.ok && key) { try { server = await probeServerReadiness({ host: s.host, username: s.contaboUser || s.user, privateKey: toOpenSshEd25519(key), fingerprint: normalizeOpenSshFingerprint(s.fingerprint) }); } catch (e) { server = { ok: false, state: "error", message: e.message, details: {} }; } }
+  const canRollback = github.ok && workflow.ok && secrets.ok && ssh.ok && server.ok; // rollback stays possible while the site is down (health not required)
+  return { ok: canRollback && health.ok, canRollback, checkedAt, github, workflow, secrets, ssh, server, health };
 }
 // Hard upper bound: the UI always receives a clear verdict, never an endless "evaluating" state.
 ipcMain.handle("deployment:readiness", async () => {
-  const timedOut = { ok: false, canRollback: false, timedOut: true, checkedAt: new Date().toISOString(), github: { ok: false, state: "timeout", message: "انتهت مهلة الفحص الشامل" }, workflow: { ok: false, state: "timeout", message: "انتهت مهلة الفحص الشامل" }, secrets: { ok: false, state: "timeout", missing: [], names: [], message: "انتهت مهلة الفحص الشامل" }, ssh: { ok: false, state: "timeout", message: "انتهت مهلة الفحص الشامل" }, health: { ok: false, status: 0, message: "انتهت مهلة الفحص الشامل" } };
+  const timedOut = { ok: false, canRollback: false, timedOut: true, checkedAt: new Date().toISOString(), github: { ok: false, state: "timeout", message: "انتهت مهلة الفحص الشامل" }, workflow: { ok: false, state: "timeout", message: "انتهت مهلة الفحص الشامل" }, secrets: { ok: false, state: "timeout", missing: [], names: [], message: "انتهت مهلة الفحص الشامل" }, ssh: { ok: false, state: "timeout", message: "انتهت مهلة الفحص الشامل" }, server: { ok: false, state: "timeout", message: "انتهت مهلة الفحص الشامل", details: {} }, health: { ok: false, status: 0, message: "انتهت مهلة الفحص الشامل" } };
   try { return await withDeadline(computeReadiness(), READINESS_DEADLINE_MS, timedOut); } catch (e) { return { ...timedOut, timedOut: false, github: { ok: false, state: "error", message: e.message } }; }
 });
 ipcMain.handle("deployments:list", async () => { const status = await githubStatus(); if (!status.ok) return { ...status, runs: [] }; const s = loadSettings(); const token = await secret("github"); try { const r = await ghFetch(apiUrl(s, `/actions/workflows/${encodeURIComponent(s.workflow)}/runs?per_page=20`), { headers: ghHeaders(token) }, 10000); const d = await r.json(); if (r.status === 401) return { ...githubStateError("expired", "انتهت جلسة GitHub، أعد الربط"), runs: [] }; if (!r.ok) return { ...githubStateError("api_error", d.message || "تعذر قراءة سجل النشر"), runs: [] }; return { ok: true, state: "connected", runs: d.workflow_runs || [] }; } catch { return { ...githubStateError("connection_error", "تعذر الاتصال بسجل GitHub"), runs: [] }; } });

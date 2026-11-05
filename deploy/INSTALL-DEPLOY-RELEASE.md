@@ -34,7 +34,7 @@ install -o root -g root -m 0755 /home/saaddeploy/deploy-release.staged /opt/saad
 ```bash
 printf '%s\n' \
   'Defaults:saaddeploy env_reset, secure_path="/usr/sbin:/usr/bin:/sbin:/bin"' \
-  'saaddeploy ALL=(root) NOPASSWD: /opt/saadstudio/bin/deploy-release deploy *, /opt/saadstudio/bin/deploy-release rollback *' \
+  'saaddeploy ALL=(root) NOPASSWD: /opt/saadstudio/bin/deploy-release deploy *, /opt/saadstudio/bin/deploy-release rollback *, /opt/saadstudio/bin/deploy-release preflight' \
   > /etc/sudoers.d/saaddeploy.new
 chmod 0440 /etc/sudoers.d/saaddeploy.new
 visudo -cf /etc/sudoers.d/saaddeploy.new && mv /etc/sudoers.d/saaddeploy.new /etc/sudoers.d/saaddeploy

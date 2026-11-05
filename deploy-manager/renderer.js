@@ -330,12 +330,14 @@ async function loadAndSyncSettings(options = {}) {
 
     // مزامنة حقول المعالج
     if ($("wizGithubClientId")) $("wizGithubClientId").value = s.githubClientId || "";
-    if ($("wizOwner")) $("wizOwner").value = s.owner || "seedsat1";
+    if ($("wizOwner")) $("wizOwner").value = s.owner || "saadstudio-source";
     if ($("wizRepo")) $("wizRepo").value = s.repo || "saad-studio";
     if ($("wizHost")) $("wizHost").value = s.host || "161.97.77.229";
     if ($("wizDomain")) $("wizDomain").value = s.domain || "saadstudio.app";
     if ($("wizUser")) $("wizUser").value = s.user || "";
     if ($("wizFingerprint")) $("wizFingerprint").value = formattedFp;
+
+    if ($("valGithubRepo")) $("valGithubRepo").textContent = `${s.owner || ""}/${s.repo || ""}`;
 
     const publicKey = s.sshPublicKey || "";
     if ($("publicSshKeyDisplay")) $("publicSshKeyDisplay").value = publicKey;
@@ -378,7 +380,7 @@ async function loadAndSyncSettings(options = {}) {
     }
     ready = Boolean(check.ok);
     rollbackReady = Boolean(check.canRollback);
-    const failedParts = ["github", "workflow", "secrets", "ssh", "health"].filter((k) => check[k] && !check[k].ok).map((k) => `${k}: ${check[k].message || check[k].state || "فشل"}`);
+    const failedParts = ["github", "workflow", "secrets", "ssh", "server", "health"].filter((k) => check[k] && !check[k].ok).map((k) => `${k}: ${check[k].message || check[k].state || "فشل"}`);
     const readinessMessage = readinessError ? `فشل فحص الجاهزية: ${readinessError}` : (ready ? ghStatus.message : `غير جاهز — ${failedParts.join(" | ") || "الفحوص غير مكتملة"}`);
 
     // تحديث بطاقة Contabo
@@ -632,6 +634,15 @@ if ($("btnAddSshSecret")) {
 }
 
 let serverAuditRows = [];
+// Verdict is READY only when every deployment-critical check actually passed; BLOCKED/UNVERIFIED/FAIL never count as pass.
+function auditVerdict() {
+  const count = {}; serverAuditRows.forEach((x) => { count[x.state] = (count[x.state] || 0) + 1; });
+  const by = Object.fromEntries(serverAuditRows.map((x) => [x.key, x.state]));
+  const required = ["preflight", "workflow", "deploy-script", "caddy", "health", "database"];
+  const notPassed = required.filter((k) => by[k] !== "PASS");
+  const summary = Object.entries(count).map(([k, v]) => k + "=" + v).join(" ");
+  return notPassed.length ? "اكتمل الفحص (" + summary + ") — الحكم: غير جاهز للنشر. غير مُثبت: " + notPassed.join("، ") : "اكتمل الفحص (" + summary + ") — الحكم: الفحوصات الأساسية ناجحة فعلياً";
+}
 let serverAuditUnsubscribe = null;
 function renderAuditRow(item) {
   serverAuditRows.push(item);
@@ -653,7 +664,7 @@ if ($("btnStartServerAudit")) {
     serverAuditUnsubscribe?.();
     serverAuditUnsubscribe = window.deployManager.onServerAuditEvent((event) => {
       if (event.type === "result") renderAuditRow(event);
-      if (event.type === "done") { start.disabled = false; cancel.disabled = true; if (state) state.textContent = event.state === "DONE" ? "اكتمل الفحص؛ راجع PASS/FAIL/BLOCKED لكل بند." : event.message; serverAuditUnsubscribe?.(); serverAuditUnsubscribe = null; }
+      if (event.type === "done") { start.disabled = false; cancel.disabled = true; if (state) state.textContent = event.state === "DONE" ? auditVerdict() : event.message; serverAuditUnsubscribe?.(); serverAuditUnsubscribe = null; }
     });
     try { await window.deployManager.startServerAudit(); } catch (e) { start.disabled = false; cancel.disabled = true; if (state) state.textContent = "فشل بدء الفحص: " + friendlyIpcError(e); serverAuditUnsubscribe?.(); serverAuditUnsubscribe = null; }
   };

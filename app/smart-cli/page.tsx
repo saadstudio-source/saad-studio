@@ -28,7 +28,7 @@ import TopNavbar from "@/components/TopNavbar";
 import { cn } from "@/lib/utils";
 
 const MCP_URL = "https://www.saadstudio.app/api/smart-cli/mcp";
-const SKILLS_INSTALL = "curl -fsSL https://raw.githubusercontent.com/seedsat1/saad-studio/main/packages/skills/install.sh | bash";
+const SKILLS_INSTALL = "curl -fsSL https://raw.githubusercontent.com/saadstudio-source/saad-studio/main/packages/skills/install.sh | bash";
 
 type Step = { title: string; text: string; value: string };
 

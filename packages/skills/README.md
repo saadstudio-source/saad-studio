@@ -14,7 +14,7 @@ Four production-ready skills that teach [Claude Code](https://claude.ai/code) ho
 ### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/seedsat1/saad-studio/main/packages/skills/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/saadstudio-source/saad-studio/main/packages/skills/install.sh | bash
 ```
 
 Copies the four skill files into `~/.claude/skills/`. Re-run to update.

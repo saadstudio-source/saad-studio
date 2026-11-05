@@ -8,4 +8,4 @@
 # replace the script (a user who can replace a script that runs as root IS root, so
 # installing/updating /opt/saadstudio/bin/deploy-release stays a manual root action).
 Defaults:saaddeploy env_reset, secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
-saaddeploy ALL=(root) NOPASSWD: /opt/saadstudio/bin/deploy-release deploy *, /opt/saadstudio/bin/deploy-release rollback *
+saaddeploy ALL=(root) NOPASSWD: /opt/saadstudio/bin/deploy-release deploy *, /opt/saadstudio/bin/deploy-release rollback *, /opt/saadstudio/bin/deploy-release preflight

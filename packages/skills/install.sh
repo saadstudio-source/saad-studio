@@ -2,7 +2,7 @@
 # Install the Saad Studio skill pack for Claude Code.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/seedsat1/saad-studio/main/packages/skills/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/saadstudio-source/saad-studio/main/packages/skills/install.sh | bash
 #
 # Copies the skill markdown files into ~/.claude/skills/ so Claude Code
 # picks them up automatically. Existing files with the same names are
@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/seedsat1/saad-studio/main/packages/skills/skills"
+REPO_RAW="https://raw.githubusercontent.com/saadstudio-source/saad-studio/main/packages/skills/skills"
 SKILLS=(
   "saadstudio-image.md"
   "saadstudio-video.md"
