@@ -27,12 +27,29 @@ exec 9>"$ROOT/.deploy.lock"
 flock -n 9 || { echo "another deployment is running" >&2; exit 3; }
 
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
-git_repo() { git -c safe.directory="$REPO" -C "$REPO" "$@"; }
+# Hardened git: no hooks, no fsmonitor, no ssh command from repo config, no safe.directory override.
+git_repo() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c protocol.ext.allow=never -C "$REPO" "$@"; }
+# Everything root will execute or build from must be root-owned and not group/world-writable
+# (whole tree for .git and releases; top directories and their parents too).
+assert_trusted() {
+  local p bad
+  for p in "$@"; do
+    bad="$(find "$p" '(' ! -user root -o -perm /022 ')' -print -quit 2>/dev/null || echo unreadable)"
+    [[ -z "$bad" ]] || { echo "untrusted ownership/permissions: $bad" >&2; exit 4; }
+  done
+}
+assert_dir_chain() {
+  local d="$1"
+  while [[ "$d" != "/" ]]; do
+    [[ "$(stat -c '%U' "$d")" == root && -z "$(find "$d" -maxdepth 0 -perm /022)" ]] || { echo "untrusted directory: $d" >&2; exit 4; }
+    d="$(dirname "$d")"
+  done
+}
 
 ENV_FILE="${ENV_FILE:-$LIVE/.env.production}"
 [[ -f "$ENV_FILE" ]] || { echo "missing $ENV_FILE" >&2; exit 4; }
-[[ "$(stat -c %U "$REPO")" == root ]] || { echo "$REPO must be owned by root" >&2; exit 4; }
-[[ "$(stat -c %U "$RELEASES")" == root ]] || { echo "$RELEASES must be owned by root" >&2; exit 4; }
+assert_dir_chain "$REPO"; assert_dir_chain "$RELEASES"
+assert_trusted "$REPO/.git" "$RELEASES"
 command -v docker >/dev/null || { echo "docker not available" >&2; exit 4; }
 
 PREVIOUS=""
