@@ -34,6 +34,21 @@ jobs:
           [[ "$ACTION" == "deploy" || "$ACTION" == "rollback" ]] || { echo "invalid action"; exit 1; }
           [[ "$RELEASE_REF" =~ ^[A-Za-z0-9._/-]{1,120}$ && "$RELEASE_REF" != -* && "$RELEASE_REF" != *..* ]] || { echo "invalid release_ref"; exit 1; }
 
+  deploy-manager-tests:
+    needs: [validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_ref }}
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci --ignore-scripts
+        working-directory: deploy-manager
+      - run: npm test
+        working-directory: deploy-manager
+
   verify:
     needs: [validate]
     runs-on: ubuntu-latest
@@ -79,8 +94,8 @@ jobs:
       - run: npm run test:integration
 
   deploy:
-    needs: [verify, integration]
-    if: ${{ needs.verify.result == 'success' && needs.integration.result == 'success' }}
+    needs: [deploy-manager-tests, verify, integration]
+    if: ${{ needs.deploy-manager-tests.result == 'success' && needs.verify.result == 'success' && needs.integration.result == 'success' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30

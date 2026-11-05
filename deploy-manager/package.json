@@ -10,5 +10,8 @@
     "ssh2": "^1.16.0",
     "tweetnacl": "^0.14.5",
     "tweetnacl-sealed-box": "^1.0.5"
+  },
+  "scripts": {
+    "test": "node --test audit-fixes.test.cjs oauth-flow.test.cjs"
   }
 }

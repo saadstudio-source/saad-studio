@@ -69,6 +69,14 @@ PROJECT="${COMPOSE_PROJECT:-$(docker ps --filter publish=3000 --format '{{.Label
 PROJECT="${PROJECT:-saad-studio}"
 compose_for() { docker compose -p "$PROJECT" -f "$1/docker-compose.yml" -f "$1/docker-compose.serve.yml" "${@:2}"; }
 
+# Scope guard: only the live app container of the live project may be touched.
+EXPECTED_PROJECT=saad-studio
+EXPECTED_CONTAINER=saad-studio-app-1
+[[ "$PROJECT" == "$EXPECTED_PROJECT" ]] || { echo "refusing: compose project is '$PROJECT', expected $EXPECTED_PROJECT" >&2; exit 5; }
+RUNNING="$(docker ps --filter publish=3000 --format '{{.Names}}' | head -1)"
+[[ "$RUNNING" == "$EXPECTED_CONTAINER" ]] || { echo "refusing: container on :3000 is '${RUNNING:-none}', expected $EXPECTED_CONTAINER" >&2; exit 5; }
+app_container_up() { [[ -n "$(docker ps --filter "name=^${EXPECTED_CONTAINER}$" --filter status=running -q)" ]]; }
+
 # The compose file uses a fixed image tag, so building overwrites the previous image.
 # Keep the running image under a rollback tag BEFORE building so a failed health check can really restore it.
 PREV_IMAGE_ID="$(docker image inspect -f '{{.Id}}' "$IMAGE" 2>/dev/null || true)"
@@ -91,6 +99,7 @@ restore_previous() {
 if ! compose_for "$TARGET" up -d --no-deps app; then echo "app start failed" >&2; restore_previous; exit 1; fi
 healthy=0
 for i in {1..30}; do if curl -fsS --max-time 5 http://127.0.0.1:3000/api/health >/dev/null; then healthy=1; break; fi; sleep 2; done
+if [[ "$healthy" == 1 ]] && ! app_container_up; then echo "expected container $EXPECTED_CONTAINER is not running" >&2; healthy=0; fi
 if [[ "$healthy" != 1 ]]; then restore_previous; exit 1; fi
 
 ln -sfn "$TARGET" "$CURRENT"
