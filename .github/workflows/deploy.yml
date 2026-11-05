@@ -1,4 +1,5 @@
 name: SaadStudio deploy
+run-name: ${{ inputs.action }} ${{ inputs.release_ref }}
 
 on:
   workflow_dispatch:
@@ -11,7 +12,7 @@ on:
       release_ref:
         description: branch or commit SHA to release
         required: true
-        default: main
+        default: migration/contabo
 
 concurrency:
   group: saadstudio-production-deploy
@@ -21,11 +22,26 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Validate inputs (allowlist, no shell interpolation of user input)
+        env:
+          ACTION: ${{ inputs.action }}
+          RELEASE_REF: ${{ inputs.release_ref }}
+        run: |
+          [[ "$ACTION" == "deploy" || "$ACTION" == "rollback" ]] || { echo "invalid action"; exit 1; }
+          [[ "$RELEASE_REF" =~ ^[A-Za-z0-9._/-]{1,120}$ && "$RELEASE_REF" != -* && "$RELEASE_REF" != *..* ]] || { echo "invalid release_ref"; exit 1; }
+
+  verify:
+    needs: [validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-        with: { ref: ${{ inputs.release_ref }} }
+        with:
+          ref: ${{ inputs.release_ref }}
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm install --legacy-peer-deps --no-audit --no-fund
@@ -34,7 +50,9 @@ jobs:
       - run: npm run build
 
   integration:
+    needs: [validate]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -52,7 +70,8 @@ jobs:
       DIRECT_URL: postgresql://saad_test:saad_test@127.0.0.1:5433/saad_studio_test
     steps:
       - uses: actions/checkout@v4
-        with: { ref: ${{ inputs.release_ref }} }
+        with:
+          ref: ${{ inputs.release_ref }}
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm install --legacy-peer-deps --no-audit --no-fund
@@ -64,12 +83,18 @@ jobs:
     if: ${{ needs.verify.result == 'success' && needs.integration.result == 'success' }}
     runs-on: ubuntu-latest
     environment: production
+    timeout-minutes: 30
     steps:
       - name: Deploy immutable release over SSH
         uses: appleboy/ssh-action@v1.2.2
+        env:
+          ACTION: ${{ inputs.action }}
+          RELEASE_REF: ${{ inputs.release_ref }}
         with:
           host: ${{ secrets.CONTABO_HOST }}
           username: ${{ secrets.CONTABO_USER }}
           key: ${{ secrets.CONTABO_SSH_KEY }}
           fingerprint: ${{ secrets.CONTABO_SSH_FINGERPRINT }}
-          script: /opt/saadstudio/bin/deploy-release '${{ inputs.action }}' '${{ inputs.release_ref }}'
+          envs: ACTION,RELEASE_REF
+          command_timeout: 25m
+          script: sudo -n /opt/saadstudio/bin/deploy-release "$ACTION" "$RELEASE_REF"

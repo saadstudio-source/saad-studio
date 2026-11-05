@@ -24,7 +24,14 @@ function normalizeFingerprint(value) {
 }
 
 function scrub(value) {
-  return String(value || "").replace(/(DATABASE_URL|DIRECT_URL|TOKEN|PASSWORD|SECRET|PRIVATE_KEY)=[^\\s]*/gi, "$1=[REDACTED]").slice(0, 12000);
+  // NOTE: the previous pattern used [^\\s]* inside a regex literal, which stops at the letter "s" and leaked secret tails.
+  return String(value || "")
+    .replace(/([A-Z0-9_]*(?:DATABASE_URL|DIRECT_URL|TOKEN|PASSWORD|SECRET|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)\s*=\s*\S*/gi, "$1=[REDACTED]")
+    .replace(/(["']?(?:password|token|secret|api[_-]?key|authorization)["']?\s*:\s*)"[^"]*"/gi, '$1"[REDACTED]"')
+    .replace(/\b(postgres(?:ql)?|mysql|redis|mongodb(?:\+srv)?):\/\/[^\s'"]+/gi, "$1://[REDACTED]")
+    .replace(/\b(?:ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{20,}/g, "[REDACTED_GITHUB_TOKEN]")
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED_PRIVATE_KEY]")
+    .slice(0, 12000);
 }
 
 function runCommand(client, command, timeoutMs, cancelled) {
@@ -57,7 +64,8 @@ function applyEvidenceSemantics(key, result) {
   }
   if (key !== "caddy") return result;
   const text = `${result.stdout || ""}\n${result.stderr || ""}`;
-  const httpsOk = /^HTTP\/\d(?:\.\d)?\s+2\d\d/m.test(text) && /"ok"\s*:\s*true/.test(text);
+  // The site root answers 307 (redirect to the app); a 3xx from Caddy is a healthy HTTPS response, not a failure.
+  const httpsOk = /^HTTP\/\d(?:\.\d)?\s+[23]\d\d/m.test(text) && /"ok"\s*:\s*true/.test(text);
   const caddyProcess = /caddy\s+run/.test(text);
   if (httpsOk && caddyProcess) return { ...result, ok: true, state: "PASS", message: "HTTPS وCaddy يعملان فعلياً؛ Caddy قد لا يكون systemd service" };
   return { ...result, ok: false, state: httpsOk ? "WARNING" : "FAIL", message: httpsOk ? "HTTPS يعمل لكن عملية Caddy لم تثبت في المخرجات" : "لم يثبت تشغيل HTTPS وHealth API مع Caddy" };
@@ -84,4 +92,4 @@ function runServerAudit({ id, host, username, privateKey, fingerprint, onResult,
   return { promise, cancel };
 }
 
-module.exports = { runServerAudit };
+module.exports = { runServerAudit, scrub };

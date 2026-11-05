@@ -1,0 +1,11 @@
+# PROPOSAL ONLY - NOT APPLIED. Requires explicit owner approval, then (as root on the server):
+#   install -m 0440 -o root -g root saaddeploy-sudoers.example /etc/sudoers.d/saaddeploy
+#   visudo -cf /etc/sudoers.d/saaddeploy
+#
+# Gives `saaddeploy` exactly one privileged capability: run the audited deploy script,
+# which is owned by root (0755, not writable by saaddeploy) and validates its own arguments.
+# It does NOT add saaddeploy to the docker group, grant a root shell, or allow it to
+# replace the script (a user who can replace a script that runs as root IS root, so
+# installing/updating /opt/saadstudio/bin/deploy-release stays a manual root action).
+Defaults:saaddeploy env_reset, secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
+saaddeploy ALL=(root) NOPASSWD: /opt/saadstudio/bin/deploy-release deploy *, /opt/saadstudio/bin/deploy-release rollback *

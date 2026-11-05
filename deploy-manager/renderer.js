@@ -9,6 +9,8 @@ let devicePrompt = "";
 let currentWizardStep = 1;
 let lastKnownRuns = [];
 let readinessBusy = false;
+let rollbackReady = false;
+let firstLoad = true;
 
 // نصوص وحالات المصادقة بالعربية
 const LABELS = {
@@ -51,6 +53,26 @@ function out(v) {
   const time = new Date().toLocaleTimeString("ar-EG", { hour12: false });
   const cleaned = scrubSecrets(v);
   terminal.textContent = `[${time}] ${cleaned}\n` + terminal.textContent;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+// Never let a pending IPC call keep the UI in a loading state forever.
+function withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`انتهت مهلة ${label} (${Math.round(ms / 1000)} ثانية)`)), ms); })]).finally(() => clearTimeout(timer));
+}
+// Rollback target = the previous successful run, never the newest run (which may be the failed/current one).
+function pickRollbackTarget(runs) {
+  const successes = (runs || []).filter((r) => r.conclusion === "success" && /^[0-9a-f]{40}$/i.test(r.head_sha || ""));
+  return successes.length >= 2 ? successes[1] : null;
+}
+let actionBusy = false;
+async function guarded(button, task) {
+  if (actionBusy) { out("توجد عملية قيد التنفيذ؛ انتظر اكتمالها."); return; }
+  actionBusy = true; if (button) button.disabled = true;
+  try { return await task(); } finally { actionBusy = false; if (button) button.disabled = false; setAuth(authState); }
 }
 
 function friendlyIpcError(error) {
@@ -244,9 +266,10 @@ function setAuth(state, message) {
   }
 
   // تفعيل أو تعطيل أزرار النشر
-  const canDeploy = (state === "connected" && ready);
+  const canDeploy = (state === "connected" && ready && !actionBusy);
+  const canRollbackNow = (state === "connected" && rollbackReady && !actionBusy);
   if ($("deploy")) $("deploy").disabled = !canDeploy;
-  if ($("rollback")) $("rollback").disabled = !canDeploy;
+  if ($("rollback")) $("rollback").disabled = !canRollbackNow;
 
   // تحديث بانر الجاهزية الرئيسي
   updateReadinessBanner(canDeploy, message);
@@ -328,9 +351,9 @@ async function loadAndSyncSettings(options = {}) {
     // فحص حالة GitHub
     let ghStatus = { ok: false, state: "disconnected" };
     try {
-      ghStatus = await window.deployManager.githubStatus();
+      ghStatus = await withTimeout(window.deployManager.githubStatus(), 20000, "فحص GitHub");
     } catch (e) {
-      ghStatus = { ok: false, state: "connection_error", message: e.message };
+      ghStatus = { ok: false, state: "connection_error", message: friendlyIpcError(e) };
     }
 
     // تحديث بطاقة GitHub في الداشبورد
@@ -346,12 +369,17 @@ async function loadAndSyncSettings(options = {}) {
 
     // فحص جاهزية النشر الشاملة
     let check = { ok: false, ssh: { ok: false }, health: { ok: false } };
+    let readinessError = "";
     try {
-      check = await window.deployManager.readiness();
+      check = await withTimeout(window.deployManager.readiness(), 60000, "فحص الجاهزية");
     } catch (e) {
+      readinessError = friendlyIpcError(e);
       check = { ok: false, ssh: { ok: false }, health: { ok: false } };
     }
-    ready = check.ok;
+    ready = Boolean(check.ok);
+    rollbackReady = Boolean(check.canRollback);
+    const failedParts = ["github", "workflow", "secrets", "ssh", "health"].filter((k) => check[k] && !check[k].ok).map((k) => `${k}: ${check[k].message || check[k].state || "فشل"}`);
+    const readinessMessage = readinessError ? `فشل فحص الجاهزية: ${readinessError}` : (ready ? ghStatus.message : `غير جاهز — ${failedParts.join(" | ") || "الفحوص غير مكتملة"}`);
 
     // تحديث بطاقة Contabo
     const pillContabo = $("pillContabo");
@@ -369,7 +397,7 @@ async function loadAndSyncSettings(options = {}) {
     // فحص أسرار Actions
     let secrets = { ok: false, environment: false, names: [] };
     try {
-      secrets = await window.deployManager.secretsStatus();
+      secrets = await withTimeout(window.deployManager.secretsStatus(), 20000, "فحص Secrets");
     } catch {}
     const pillActions = $("pillActions");
     if (pillActions) {
@@ -397,20 +425,28 @@ async function loadAndSyncSettings(options = {}) {
     });
 
     // ضبط حالة التطبيق
-    setAuth(ghStatus.state || "disconnected", ready ? ghStatus.message : "الاتصالات أو فحوص الجاهزية غير مكتملة؛ النشر معطّل");
+    setAuth(ghStatus.state || "disconnected", readinessMessage);
 
-    // التواجد الافتراضي دائماً في لوحة التحكم الرئيسية
-    // المعالج يُفتح عند النقر على زره المخصص في الشريط الجانبي
-    if (options.keepWizard || (s.wizardStep && localStorage.getItem("saadstudio_setup_completed") !== "true")) {
+    // التبديل بين الصفحات يتم عند الإقلاع فقط؛ التحديثات اللاحقة لا تنقل المستخدم من الصفحة الحالية
+    if (options.keepWizard) {
       switchView("view-wizard");
       goToWizardStep(currentWizardStep);
-    } else {
-      switchView("view-dashboard");
+    } else if (firstLoad) {
+      if (localStorage.getItem("saadstudio_setup_completed") !== "true" && !(s.hasSshKey && s.fingerprint && s.hasGithubToken)) {
+        switchView("view-wizard");
+        goToWizardStep(currentWizardStep);
+      } else {
+        switchView("view-dashboard");
+      }
     }
+    firstLoad = false;
 
     return s;
   } catch (err) {
-    out("خطأ أثناء تحميل الإعدادات: " + err.message);
+    firstLoad = false;
+    ready = false; rollbackReady = false;
+    setAuth("connection_error", "تعذر تقييم الجاهزية: " + friendlyIpcError(err));
+    out("خطأ أثناء تحميل الإعدادات: " + friendlyIpcError(err));
   }
 }
 
@@ -428,11 +464,11 @@ async function fetchAndRenderRuns() {
   }
 
   try {
-    const result = await window.deployManager.listRuns();
+    const result = await withTimeout(window.deployManager.listRuns(), 25000, "قراءة سجل النشر");
     if (!result.ok) {
       setAuth(result.state, result.message);
-      if (runsContainer) runsContainer.innerHTML = `<div class="empty-state">${result.message}</div>`;
-      if (fullRunsContainer) fullRunsContainer.innerHTML = `<div class="empty-state">${result.message}</div>`;
+      if (runsContainer) runsContainer.innerHTML = `<div class="empty-state">${escapeHtml(result.message)}</div>`;
+      if (fullRunsContainer) fullRunsContainer.innerHTML = `<div class="empty-state">${escapeHtml(result.message)}</div>`;
       return;
     }
 
@@ -441,8 +477,8 @@ async function fetchAndRenderRuns() {
 
     // تحديث نص زر التراجع بـ SHA لآخر إصدار ناجح
     if ($("rollbackLabel") && runs.length > 0) {
-      const lastSha = runs[0]?.head_sha?.slice(0, 7) || "";
-      if (lastSha) $("rollbackLabel").textContent = `Rollback إلى (${lastSha})`;
+      const target = pickRollbackTarget(runs);
+      $("rollbackLabel").textContent = target ? `Rollback إلى (${target.head_sha.slice(0, 7)})` : "Rollback (لا يوجد إصدار سابق ناجح)";
     }
 
     if (!runs.length) {
@@ -457,14 +493,15 @@ async function fetchAndRenderRuns() {
       const isSuccess = r.conclusion === "success";
       const isFailed = r.conclusion === "failure";
       const pillClass = isSuccess ? "badge-success" : isFailed ? "badge-danger" : "badge-warning";
-      const statusText = r.status === "completed" ? (r.conclusion || "مكتمل") : "قيد التنفيذ…";
-      const dateStr = r.created_at ? new Date(r.created_at).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" }) : "";
+      const statusText = escapeHtml(r.status === "completed" ? (r.conclusion || "مكتمل") : "قيد التنفيذ…");
+      const dateStr = r.created_at ? escapeHtml(new Date(r.created_at).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" })) : "";
+      const safeUrl = /^https:\/\/github\.com\//.test(r.html_url || "") ? escapeHtml(r.html_url) : "#";
 
       return `
         <div class="run-card">
           <div class="run-primary">
-            <a href="${r.html_url}" target="_blank" class="run-number" title="فتح في GitHub Actions">#${r.run_number}</a>
-            <span class="run-sha" title="Commit Hash">${r.head_sha?.slice(0, 7)}</span>
+            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="run-number" title="فتح في GitHub Actions">#${escapeHtml(r.run_number)}</a>
+            <span class="run-sha" title="Commit Hash">${escapeHtml(r.head_sha?.slice(0, 7))}</span>
             <span style="color: var(--text-muted); font-size: 11px;">${dateStr}</span>
           </div>
           <div class="run-secondary">
@@ -481,7 +518,9 @@ async function fetchAndRenderRuns() {
       fullRunsContainer.innerHTML = runs.map(formatRunCard).join("");
     }
   } catch (e) {
-    if (runsContainer) runsContainer.innerHTML = `<div class="empty-state">تعذر جلب السجل: ${e.message}</div>`;
+    const failure = `<div class="empty-state">تعذر جلب السجل: ${escapeHtml(friendlyIpcError(e))}</div>`;
+    if (runsContainer) runsContainer.innerHTML = failure;
+    if (fullRunsContainer) fullRunsContainer.innerHTML = failure;
   }
 }
 
@@ -649,7 +688,7 @@ if ($("btnLoadRepairPlan")) $("btnLoadRepairPlan").onclick = async () => {
   const started = Date.now(); button.disabled = true; root.textContent = ""; state.textContent = "جارٍ الاتصال عبر SSH وفحص خدمة HTTPS قراءة فقط…";
   const log = document.createElement("pre"); log.className = "repair-activity"; log.textContent = `[${new Date().toLocaleTimeString()}] بدء فحص خطة الإصلاح عبر SSH`; root.appendChild(log);
   try {
-    const result = await window.deployManager.serverRepairPlan();
+    const result = await withTimeout(window.deployManager.serverRepairPlan(), 40000, "فحص خطة الإصلاح");
     const probe = document.createElement("div"); probe.className = "audit-row";
     const title = document.createElement("strong"); title.textContent = "نتيجة فحص HTTPS الفعلي";
     const badge = document.createElement("span"); badge.className = "audit-state " + (result.probe.ok ? "pass" : "fail"); badge.textContent = result.probe.ok ? "PASS" : "FAIL";
@@ -782,10 +821,13 @@ async function handleGithubDeviceFlow() {
         return;
       }
 
-      const result = await window.deployManager.githubPoll({
-        clientId,
-        deviceCode: code.device_code
-      });
+      let result;
+      try {
+        result = await withTimeout(window.deployManager.githubPoll({ clientId, deviceCode: code.device_code }), 20000, "استعلام تفويض GitHub");
+      } catch (e) {
+        result = { ok: false, state: "pending", interval: 10 }; // transient IPC/network failure: keep polling until the code expires
+        out("تعذر استعلام GitHub مؤقتاً، ستتم إعادة المحاولة: " + friendlyIpcError(e));
+      }
 
       if (result.ok) {
         polling = false;
@@ -820,19 +862,19 @@ if ($("deploy")) {
   $("deploy").onclick = () => {
     showConfirmModal({
       title: "تأكيد تشغيل Workflow النشر",
-      message: "سيتم إرسال إشارة dispatch إلى GitHub Actions لنشر الفرع الرئيسي (main) إلى خادم Contabo. هل تريد المتابعة؟",
+      message: "سيتم إرسال إشارة dispatch إلى GitHub Actions لنشر فرع الإصدار المضبوط في الإعدادات (الافتراضي migration/contabo) إلى خادم Contabo. هل تريد المتابعة؟",
       icon: "🚀",
       confirmLabel: "نشر الآن",
-      onConfirm: async () => {
+      onConfirm: () => guarded($("deploy"), async () => {
         try {
           out("جارٍ إرسال أمر النشر إلى GitHub Actions…");
-          const res = await window.deployManager.dispatch({ action: "deploy", ref: "main" });
+          const res = await withTimeout(window.deployManager.dispatch({ action: "deploy" }), 40000, "إرسال النشر");
           out("تم إرسال طلب النشر بنجاح:\n" + JSON.stringify(res, null, 2));
           await fetchAndRenderRuns();
         } catch (e) {
-          out("فشل إرسال النشر: " + e.message);
+          out("فشل إرسال النشر: " + friendlyIpcError(e));
         }
-      }
+      })
     });
   };
 }
@@ -840,10 +882,11 @@ if ($("deploy")) {
 if ($("rollback")) {
   $("rollback").onclick = async () => {
     try {
-      const runs = lastKnownRuns.length ? lastKnownRuns : (await window.deployManager.listRuns()).runs || [];
-      const ref = runs[0]?.head_sha;
+      const runs = lastKnownRuns.length ? lastKnownRuns : (await withTimeout(window.deployManager.listRuns(), 25000, "قراءة سجل النشر")).runs || [];
+      const target = pickRollbackTarget(runs);
+      const ref = target?.head_sha;
       if (!ref) {
-        out("لا يوجد إصدار سابق مسجل للتراجع إليه.");
+        out("لا يوجد إصدار سابق ناجح مسجل (يلزم تشغيلان ناجحان على الأقل) للتراجع إليه.");
         return;
       }
 
@@ -852,16 +895,16 @@ if ($("rollback")) {
         message: `سيتم التراجع بالخادم إلى الإصدار السابق (${ref.slice(0, 8)}). هل أنت متأكد؟`,
         icon: "⏪",
         confirmLabel: "تأكيد التراجع",
-        onConfirm: async () => {
+        onConfirm: () => guarded($("rollback"), async () => {
           try {
             out(`جارٍ إرسال أمر التراجع إلى الإصدار ${ref.slice(0, 8)}…`);
-            const res = await window.deployManager.dispatch({ action: "rollback", ref });
+            const res = await withTimeout(window.deployManager.dispatch({ action: "rollback", ref }), 40000, "إرسال التراجع");
             out("تم إرسال طلب التراجع بنجاح:\n" + JSON.stringify(res, null, 2));
             await fetchAndRenderRuns();
           } catch (e) {
-            out("فشل التراجع: " + e.message);
+            out("فشل التراجع: " + friendlyIpcError(e));
           }
-        }
+        })
       });
     } catch (e) {
       out(e.message);
@@ -886,7 +929,7 @@ if ($("status")) {
 async function handleSshTest() {
   try {
     out("جارٍ اختبار اتصال SSH بالمفتاح المخزن…");
-    const res = await window.deployManager.sshTest();
+    const res = await withTimeout(window.deployManager.sshTest(), 25000, "اختبار SSH");
     out("نتيجة اختبار SSH:\n" + JSON.stringify(res, null, 2));
   } catch (e) {
     out("فشل اختبار SSH: " + e.message);
@@ -946,7 +989,7 @@ async function runWizardFinalReadinessCheck() {
   try {
     const started = Date.now();
     out("معالج الإعداد: جارٍ فحص GitHub وWorkflow وSecrets وSSH وصحة الموقع…");
-    const check = await window.deployManager.readiness();
+    const check = await withTimeout(window.deployManager.readiness(), 60000, "فحص الجاهزية");
     const updateCheckItem = (id, result) => {
       const el = $(id);
       if (!el) return;
