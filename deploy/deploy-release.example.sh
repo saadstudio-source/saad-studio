@@ -6,17 +6,21 @@ set -euo pipefail
 # (see deploy/saaddeploy-sudoers.example) so that `saaddeploy` itself never gets a root
 # shell or Docker group membership. It accepts only two allowlisted arguments and never
 # evaluates shell supplied by the caller.
-ACTION="${1:-}"; REF="${2:-}"
+[[ $# -eq 2 ]] || { echo "usage: deploy-release <deploy|rollback> <ref>" >&2; exit 2; }
+ACTION="$1"; REF="$2"
 [[ "$ACTION" == "deploy" || "$ACTION" == "rollback" ]] || { echo "invalid action" >&2; exit 2; }
 [[ "$REF" =~ ^[A-Za-z0-9._/-]{1,120}$ && "$REF" != -* && "$REF" != *..* ]] || { echo "invalid ref" >&2; exit 2; }
 
 ROOT=/opt/saadstudio
-RELEASES="$ROOT/releases"
+# Releases are built from a ROOT-OWNED checkout and stored in a ROOT-OWNED directory, so the
+# unprivileged deploy user can never plant git hooks/config or swap build contexts that this
+# script then executes as root. Override with the environment only from a root shell.
+LIVE="${LIVE_DIR:-/opt/saad-studio}"               # existing production checkout + .env.production
+RELEASES="${RELEASES_DIR:-$ROOT/root-releases}"
 CURRENT="$ROOT/current"
-REPO="$ROOT/repository"
+REPO="${REPO_DIR:-$LIVE}"
 IMAGE=saad-studio:local
 KEEP_RELEASES=5
-mkdir -p "$RELEASES"
 
 # One deployment at a time (GitHub concurrency also serialises, this protects manual runs).
 exec 9>"$ROOT/.deploy.lock"
@@ -25,7 +29,10 @@ flock -n 9 || { echo "another deployment is running" >&2; exit 3; }
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
 git_repo() { git -c safe.directory="$REPO" -C "$REPO" "$@"; }
 
-[[ -f "$ROOT/.env.production" ]] || { echo "missing $ROOT/.env.production" >&2; exit 4; }
+ENV_FILE="${ENV_FILE:-$LIVE/.env.production}"
+[[ -f "$ENV_FILE" ]] || { echo "missing $ENV_FILE" >&2; exit 4; }
+[[ "$(stat -c %U "$REPO")" == root ]] || { echo "$REPO must be owned by root" >&2; exit 4; }
+[[ "$(stat -c %U "$RELEASES")" == root ]] || { echo "$RELEASES must be owned by root" >&2; exit 4; }
 command -v docker >/dev/null || { echo "docker not available" >&2; exit 4; }
 
 PREVIOUS=""
@@ -37,9 +44,13 @@ git_repo fetch --tags origin "$REF"
 SHA="$(git_repo rev-parse 'FETCH_HEAD^{commit}')"
 TARGET="$RELEASES/$SHA"
 if [[ ! -d "$TARGET" ]]; then git_repo worktree add --detach "$TARGET" "$SHA"; fi
-ln -sfn "$ROOT/.env.production" "$TARGET/.env.production"
+ln -sfn "$ENV_FILE" "$TARGET/.env.production"
+[[ -f "$LIVE/.env" ]] && ln -sfn "$LIVE/.env" "$TARGET/.env"   # SITE_DOMAIN / ACME_EMAIL interpolation
 
-compose_for() { docker compose -p saadstudio -f "$1/docker-compose.yml" -f "$1/docker-compose.serve.yml" "${@:2}"; }
+# Reuse the running stack's compose project so we update it instead of creating a second stack.
+PROJECT="${COMPOSE_PROJECT:-$(docker ps --filter publish=3000 --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | head -1)}"
+PROJECT="${PROJECT:-saad-studio}"
+compose_for() { docker compose -p "$PROJECT" -f "$1/docker-compose.yml" -f "$1/docker-compose.serve.yml" "${@:2}"; }
 
 # The compose file uses a fixed image tag, so building overwrites the previous image.
 # Keep the running image under a rollback tag BEFORE building so a failed health check can really restore it.
