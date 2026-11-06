@@ -4,7 +4,7 @@ import prismadb from "@/lib/prismadb";
 
 export const dynamic = "force-dynamic";
 
-export const MAX_USER_PROFILES = 10;
+const MAX_USER_PROFILES = 10;
 
 export async function GET(req: NextRequest) {
   try {
