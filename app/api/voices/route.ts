@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     const language = searchParams.get("language");
     const gender = searchParams.get("gender");
     const search = searchParams.get("search")?.toLowerCase().trim();
+    const model = searchParams.get("model")?.toLowerCase().trim();
 
     const registry = getRegistry();
 
@@ -31,6 +32,16 @@ export async function GET(req: NextRequest) {
 
     if (category && category !== "all") {
       voices = voices.filter((v) => v.category === category || (category === "arabic" && v.language === "Arabic"));
+    }
+
+    if (model) {
+      const isElevenModel = model.startsWith("elevenlabs/");
+      const isGeminiModel = model.startsWith("gemini-");
+      voices = voices.filter((v) => {
+        if (isElevenModel) return v.provider === "wavespeed" && Boolean(v.compatibleModels?.some((id) => id.toLowerCase() === model));
+        if (isGeminiModel) return v.provider === "gemini";
+        return !v.compatibleModels || v.compatibleModels.some((id) => id.toLowerCase() === model);
+      });
     }
 
     if (language && language !== "All languages" && language !== "all") {

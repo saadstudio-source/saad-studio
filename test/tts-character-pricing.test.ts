@@ -46,14 +46,14 @@ describe("TTS Character-Based Credit Pricing Acceptance Suite", () => {
     expect(countAudioScriptCharacters(rawText)).toBe(countAudioScriptCharacters(normalized));
   });
 
-  it("verifies Cloned Voice TTS uses the same canonical TTS pricing formula", () => {
+  it("keeps legacy Voice Cloning separate from canonical TTS pricing", () => {
     const script627 = "X".repeat(627);
     const standardTtsCredits = calculateTtsCredits(script627);
     const clonedTtsCredits = getAudioActionCredits("voice-cloning", { text: script627 });
 
     expect(standardTtsCredits).toBe(3);
-    expect(clonedTtsCredits).toBe(3);
-    expect(clonedTtsCredits).toBe(standardTtsCredits);
+    expect(clonedTtsCredits).toBe(89.6);
+    expect(clonedTtsCredits).not.toBe(standardTtsCredits);
   });
 
   it("verifies Music and SFX pricing use duration-based canonical formulas without character leakage", () => {

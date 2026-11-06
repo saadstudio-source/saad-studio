@@ -362,6 +362,7 @@ export const CURATED_GEMINI_TTS_VOICES: DynamicTTSVoice[] = [
 ];
 
 export const CURATED_ELEVENLABS_TTS_VOICES: DynamicTTSVoice[] = [
+  { id: "Alicia", name: "Alicia (Expressive - Multilingual)" },
   { id: "Aria", name: "Aria (Multilingual - Expressive)" },
   { id: "Roger", name: "Roger (Confident - Narrator)" },
   { id: "Sarah", name: "Sarah (Warm - News / Commercial)" },
@@ -385,6 +386,36 @@ export const CURATED_ELEVENLABS_TTS_VOICES: DynamicTTSVoice[] = [
 ];
 
 export const CURATED_TTS_MODELS: DynamicTTSModel[] = [
+  {
+    id: "elevenlabs/eleven-v4",
+    name: "ElevenLabs Eleven V4",
+    family: "elevenlabs",
+    badge: "NEW",
+    description: "Expressive multilingual speech with inline audio tags",
+    provider: "elevenlabs",
+    voices: CURATED_ELEVENLABS_TTS_VOICES,
+    defaultVoice: "Alicia",
+    hasEmotion: false,
+    hasStability: true,
+    hasClarity: true,
+    hasSpeed: false,
+    isActive: true,
+  },
+  {
+    id: "elevenlabs/eleven-v4-turbo",
+    name: "ElevenLabs Eleven V4 Turbo",
+    family: "elevenlabs",
+    badge: "NEW",
+    description: "Fast expressive multilingual speech for rapid production",
+    provider: "elevenlabs",
+    voices: CURATED_ELEVENLABS_TTS_VOICES,
+    defaultVoice: "Alicia",
+    hasEmotion: false,
+    hasStability: true,
+    hasClarity: true,
+    hasSpeed: false,
+    isActive: true,
+  },
   {
     id: "elevenlabs/text-to-speech-multilingual-v2",
     name: "ElevenLabs Multilingual v2",

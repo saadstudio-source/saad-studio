@@ -83,11 +83,21 @@ describe("Model Capability Badges Contract Tests", () => {
     expect(caps.creditRange).toBeTruthy();
   });
 
-  it("keeps the six visible Seedance cards aligned with the official WaveSpeed contracts", () => {
+  it("keeps the visible Seedance cards aligned with the official WaveSpeed contracts", () => {
     const ratios = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"];
     const cases = [
       {
+        id: "bytedance-seedance-v25-t2v",
+        name: "Seedance 2.5",
+        text: "bytedance/seedance-2.5/text-to-video",
+        image: "bytedance/seedance-2.5/image-to-video",
+        resolutions: ["480p", "720p", "1080p", "4k"],
+        maxDuration: 30,
+        refs: [30, 10, 10],
+      },
+      {
         id: "bytedance-seedance-v25-t2v-turbo",
+        name: "Seedance 2.5 Turbo",
         text: "bytedance/seedance-2.5/text-to-video-turbo",
         image: "bytedance/seedance-2.5/image-to-video-turbo",
         resolutions: ["720p", "1080p"],
@@ -139,6 +149,7 @@ describe("Model Capability Badges Contract Tests", () => {
     for (const expected of cases) {
       const model = VIDEO_MODEL_REGISTRY.find((candidate) => candidate.id === expected.id);
       expect(model, expected.id).toBeDefined();
+      if ("name" in expected) expect(model?.name).toBe(expected.name);
       expect(model?.text_api_route).toBe(expected.text);
       expect(model?.reference_api_route).toBe(expected.text);
       expect(model?.image_api_route).toBe(expected.image);

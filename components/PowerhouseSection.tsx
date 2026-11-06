@@ -8,7 +8,6 @@ import {
   useTransform,
   type Variants,
 } from "framer-motion";
-import { Montserrat } from "next/font/google";
 import {
   Clapperboard,
   Zap,
@@ -21,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
-const montserrat = Montserrat({ weight: "700", subsets: ["latin"] });
+const montserrat = { className: "font-sans" };
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 const POWERHOUSES = [

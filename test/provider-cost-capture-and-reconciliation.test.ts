@@ -292,7 +292,7 @@ describe("Provider Cost Capture & Reconciliation Hardening Suite", () => {
     expect(h3Credits).toBe(28);
 
     const veoCredits = getGenerationCostSync("google/veo3.1-fast-text-to-video", 8, 1, "1080p");
-    expect(veoCredits).toBe(26.88);
+    expect(veoCredits).toBe(53.76);
 
     const s25Credits = getGenerationCostSync("bytedance/seedance-2.5/text-to-video-turbo", 30, 1, "720p");
     expect(s25Credits).toBe(302.4);

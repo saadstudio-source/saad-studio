@@ -870,7 +870,7 @@ if ($("wizGithubSetup")) $("wizGithubSetup").onclick = handleGithubDeviceFlow;
 // ============================================================================
 // عمليات النشر والتراجع الآمنة (Deploy & Rollback Handlers)
 // ============================================================================
-// النشر المباشر عبر SSH (بدون GitHub Actions): مراجعة SHA الدقيق ← تأكيد ← تنفيذ مع بث المخرجات ← فحص صحة الموقع.
+// النشر المباشر عبر SSH (بدون GitHub Actions): مراجعة SHA الدقيق ← تأكيد ← تنفيذ مع بث المخرجات ← فحص الصحة.
 let liveBuf = ""; let livePrev = ""; let liveActive = false; let directEventsBound = false;
 function renderLive() { const t = $("output"); if (t) t.textContent = "── مخرجات السيرفر (مباشر) ──\n" + liveBuf.slice(-12000) + "\n────────────\n" + livePrev; }
 function bindDirectEvents() {

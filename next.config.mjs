@@ -70,11 +70,6 @@ const nextConfig = {
   output: process.env.NEXT_OUTPUT_MODE === "standalone" ? "standalone" : undefined,
   poweredByHeader: false,
   compress: true,
-  typescript: {
-    // vitest config imports @vitejs/plugin-react which has broken TS declarations
-    // Tests still run via vitest — this only skips Next.js type-check pass
-    ignoreBuildErrors: true,
-  },
   experimental: {
     serverComponentsExternalPackages: ["sharp", "fluent-ffmpeg", "@ffmpeg-installer/ffmpeg", "ffmpeg-static"],
     serverActions: {

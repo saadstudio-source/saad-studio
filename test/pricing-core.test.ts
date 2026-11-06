@@ -47,7 +47,7 @@ const parityCases: PricingCase[] = [
     modelRef: "google/veo3.1-fast-text-to-video",
     durationSec: 8,
     quality: "1080p",
-    expected: 26.88,
+    expected: 53.76,
   },
   {
     name: "Seedance 2.5",
@@ -61,7 +61,7 @@ const parityCases: PricingCase[] = [
     modelRef: "bytedance/seedance-2.0/text-to-video-turbo",
     durationSec: 15,
     quality: "1080p",
-    expected: 120.96,
+    expected: 96.6,
   },
   {
     name: "Seedance 2.0 Mini",
@@ -75,7 +75,7 @@ const parityCases: PricingCase[] = [
     modelRef: "bytedance/seedance-2",
     durationSec: 15,
     quality: "720p",
-    expected: 116,
+    expected: 201.6,
   },
   {
     name: "Minimax H3 reference 768p",
@@ -117,21 +117,21 @@ const parityCases: PricingCase[] = [
     modelRef: "alibaba/wan-3.0/text-to-video",
     durationSec: 30,
     quality: "480p",
-    expected: 117.6,
+    expected: 84,
   },
   {
     name: "Alibaba Wan 3.0 720p",
     modelRef: "alibaba/wan-3.0/image-to-video",
     durationSec: 30,
     quality: "720p",
-    expected: 201.6,
+    expected: 168,
   },
   {
     name: "Alibaba Wan 3.0 1080p",
     modelRef: "alibaba/wan-3.0/reference-to-video",
     durationSec: 30,
     quality: "1080p",
-    expected: 470.4,
+    expected: 336,
   },
   {
     name: "GPT Image 2",
@@ -252,10 +252,10 @@ describe("pricing core user charge parity", () => {
   it("prices Alibaba Wan 3.0 short generations from official route-specific rates plus platform margin", async () => {
     invalidatePricingCache();
 
-    await expect(getGenerationCost("alibaba/wan-3.0/text-to-video", 2, 1, "480p")).resolves.toBe(7.84);
-    await expect(getGenerationCost("alibaba/wan-3.0/image-to-video", 2, 1, "720p")).resolves.toBe(13.44);
-    await expect(getGenerationCost("alibaba/wan-3.0/reference-to-video", 2, 1, "1080p")).resolves.toBe(31.36);
-    expect(getVideoCreditsByRoute("alibaba/wan-3.0/reference-to-video", { duration: 2, resolution: "1080p" })).toBe(31.36);
+    await expect(getGenerationCost("alibaba/wan-3.0/text-to-video", 2, 1, "480p")).resolves.toBe(5.6);
+    await expect(getGenerationCost("alibaba/wan-3.0/image-to-video", 2, 1, "720p")).resolves.toBe(11.2);
+    await expect(getGenerationCost("alibaba/wan-3.0/reference-to-video", 2, 1, "1080p")).resolves.toBe(22.4);
+    expect(getVideoCreditsByRoute("alibaba/wan-3.0/reference-to-video", { duration: 2, resolution: "1080p" })).toBe(22.4);
   });
 
   it("keeps Hyper3D Rodin 2 3D routes billable through the legacy API resolver", async () => {
@@ -279,10 +279,10 @@ describe("pricing core user charge parity", () => {
     invalidatePricingCache();
 
     const expectedByQuality = [
-      ["360p", 10],
-      ["720p", 30],
-      ["1080p", 45],
-      ["4k", 90],
+      ["360p", 16.8],
+      ["720p", 56],
+      ["1080p", 84],
+      ["4k", 168],
     ] as const;
 
     for (const [quality, expected] of expectedByQuality) {

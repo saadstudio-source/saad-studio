@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { VOICE_CATALOG } from "@/lib/voice-catalog";
+import { VOICE_CATALOG, WAVESPEED_ELEVEN_VOICES } from "@/lib/voice-catalog";
 import { getRegistry } from "@/lib/voice-registry";
+import { readFileSync } from "node:fs";
 
 /**
  * /api/voices used to overwrite each voice's sampleUrl with whatever the
@@ -24,6 +25,16 @@ describe("voice previews never resolve to a dead path", () => {
     expect(Object.keys(registry).length).toBeGreaterThan(0);
   });
 
+  it("contains exactly the documented WaveSpeed voice set without duplicate IDs", () => {
+    expect(WAVESPEED_ELEVEN_VOICES).toHaveLength(64);
+    expect(new Set(WAVESPEED_ELEVEN_VOICES.map((voice) => voice.id)).size).toBe(64);
+    expect(WAVESPEED_ELEVEN_VOICES.every((voice) =>
+      voice.provider === "wavespeed" &&
+      voice.compatibleModels?.includes("elevenlabs/eleven-v4") &&
+      voice.compatibleModels?.includes("elevenlabs/eleven-v4-turbo")
+    )).toBe(true);
+  });
+
   it("never serves a relative media path from the registry", () => {
     const served = VOICE_CATALOG.map((v) => resolveSampleUrl(v, registry));
     const relativeMedia = served.filter((u) => u.startsWith("/api/media/"));
@@ -34,6 +45,7 @@ describe("voice previews never resolve to a dead path", () => {
     for (const voice of VOICE_CATALOG) {
       const stored = voice.geminiVoiceId ? registry[voice.geminiVoiceId] : null;
       if (isHosted(stored)) continue;
+      if (voice.provider === "wavespeed") continue;
       expect(resolveSampleUrl(voice, registry), voice.name).toContain("/api/voice-sample");
     }
   });
@@ -46,7 +58,18 @@ describe("voice previews never resolve to a dead path", () => {
 
   it("gives every catalogue voice some playable sample url", () => {
     for (const v of VOICE_CATALOG) {
+      if (v.provider === "wavespeed") continue;
       expect(v.sampleUrl, v.name).toBeTruthy();
     }
+  });
+});
+
+describe("voice preview endpoint is reachable without a session", () => {
+  it("is explicitly allowlisted before Clerk auth in middleware", () => {
+    const middleware = readFileSync("middleware.ts", "utf8");
+    expect(
+      middleware.includes("'/api/voice-sample(.*)'") ||
+      middleware.includes("'/api/voice-sample'")
+    ).toBe(true);
   });
 });

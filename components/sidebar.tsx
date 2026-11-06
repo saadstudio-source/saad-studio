@@ -3,13 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import {usePathname} from "next/navigation";
-import { Montserrat } from 'next/font/google'
 
 import { cn } from "@/lib/utils";
 import {LayoutDashboard, MessageSquare, ImageIcon, VideoIcon, Music, Code, Settings, FileText, Sparkles} from "lucide-react";
 import {FreeCounter} from "@/components/free-counter";
 
-const montserrat = Montserrat ({ weight: '600', subsets: ['latin'] });
+const montserrat = { className: "font-sans" };
 
 const routes = [
     {

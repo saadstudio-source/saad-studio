@@ -1,4 +1,219 @@
-# Latest task: Explicit References vs Start/End input mode in the video panel (2026-10-06)
+# SaadStudio Deploy Manager Desktop Redesign & Root-Cause SSH Fingerprint Fix (2026-11-04)
+- Task: Complete redesign of SaadStudio Deploy Manager desktop UI (Electron) in `deploy-manager/` into modern professional SaaS Command Center architecture while preserving 100% of existing backend functionality and deployment contracts.
+- Root Cause Analysis & Fix for SSH Fingerprint:
+  - Symptom: Server fingerprint appeared as an unreadable comma-separated decimal series of numbers ("0,0,0,7,115,115,104...").
+  - Root Cause: `contabo:fingerprint` handler captures `hostVerifier` key Buffer. Over Electron's IPC bridge, Node Buffer is serialized as Uint8Array; assigning it directly to input called `Uint8Array.toString()`, emitting decimal byte numbers.
+  - Fix: Implemented `formatFingerprint` with `crypto.subtle.digest('SHA-256', bytes)` in `renderer.js` to convert the wire-format bytes into standard OpenSSH `SHA256:<base64>` format. Added independent verification security checkbox and warning notice before trusting the fingerprint.
+- UI Architecture:
+  1. Fixed 270px Sidebar: Brand header, Setup Wizard trigger card, Tab navigation (Dashboard, GitHub, Contabo, SSH Keys, Deploy Logs, Settings), and live footer indicators (GitHub, Contabo, Actions, Health).
+  2. Main Dashboard: 4 Status Metric cards (GitHub status & permissions, Contabo host & fingerprint, GitHub Actions workflow & secrets, Live site health 200 OK), Hero Deployment card with large glowing "نشر الآن" button (disabled when not ready), "التراجع عن آخر إصدار (Rollback)" with commit SHA, and split view with recent runs and activity console terminal.
+  3. Interactive 5-Step Setup Wizard: Multi-step guided flow for GitHub OAuth Device Flow, Contabo Host connection, SSH Fingerprint verification, Ed25519 key generation & Contabo provisioning, and full readiness review.
+  4. Confirmation Modals: Custom modal system preventing accidental execution of Deploy, Rollback, or Server provisioning. Zero actual deployments dispatched.
+  5. Secret Scrubbing: All logs scrub private keys and tokens.
+- Skills Used: `ui-ux-pro-max`, `frontend-design`, `systematic-debugging`, `playwright`.
+- Files Touched:
+  - `deploy-manager/index.html`
+  - `deploy-manager/style.css`
+  - `deploy-manager/renderer.js`
+  - `main.cjs` / `preload.cjs` / `oauth-flow.cjs`: 100% untouched to respect backend constraints.
+- Verification:
+  - Playwright Electron automation executed across 1280x720, 1920x1080, and 3440x1440.
+  - 14 full-fidelity screenshots captured and inspected with 0 console errors.
+  - Fingerprint parser verified with simulated raw byte strings (`0,0,0,7...` -> `SHA256:oKYPgdxPaT/oLlRvPsCDWHnOWZbYfDgQlFmCzuYofCs=`).
+  - Existing `oauth-flow.test.cjs` passed with exit code 0.
+
+# Execution blocker verified — 2026-11-03
+- `fs.realpathSync.native(projectPath)` fails with Windows `EPERM` inside Codex, while normal realpath succeeds. Next 14.2.35 aborts before Ready because it misclassifies installed TypeScript dependencies.
+- No application source was changed. `artifacts/next-realpath-compat.cjs` is diagnostic-only.
+- TypeScript passed. Focused WaveSpeed rerun was blocked by sandbox EPERM during Vitest cache rename; previous external/local run was 17/17.
+
+## Video tools Codex audit — 2026-11-04
+- Audited Create/Edit/Motion tabs and Text/Image/Reference/Extend/Edit/Object Swap/Upscaler/Motion routes.
+- Fixed two confirmed issues only: unified Edit sidebar now sends `kwaivgi/kling-v4.0/video-edit`; Upscaler UI now exposes 720p and matches Backend standard pricing/duration bounds.
+- Added `test/video-tools-sidebar-contract.test.ts` and `docs/VIDEO_TOOLS_CODEX_AUDIT.md`.
+- TypeScript passed. Vitest was blocked before test execution by sandbox Temp rename `EPERM`; build did not complete in the bounded Codex run. No paid generation or production access occurred.
+
+### Video tools verification follow-up — 2026-11-04
+- Vitest `EPERM` was isolated to the Codex-managed Windows Temp directory. Process-local `TEMP/TMP=artifacts/vitest-tmp` fixed cache renames.
+- Focused video/WaveSpeed Mock contracts passed 5 files / 19 tests; TypeScript passed.
+- Full Vitest exposed unrelated unreachable safety-DB tests and legacy pricing expectations; no tests were weakened. Docker test DB was unavailable due Docker Desktop pipe permissions.
+- Build was blocked by `EPERM` creating `.next/server/app/.well-known` in the Codex filesystem boundary. No build success claimed.
+
+## Windows localhost development fix — 2026-11-04
+- Confirmed Next 14.2.35's internal proxy receives a same-origin Clerk middleware rewrite targeting `localhost`; Windows resolves it to `::1`, while the old server was bound only to `127.0.0.1`.
+- Added development-only `dev:windows` (`next dev --hostname localhost`) to keep the proxy target and listener on the same hostname. No application security or provider integration changed.
+- External PowerShell HTTP retest is still required; no page success is claimed until `/image`, `/video`, `/explore`, and `/pricing` return HTTP responses.
+
+# Independent diagnostic comparison — 2026-11-03
+- The earlier OS temp diagnostic folder was absent; nothing was deleted. A retained standalone JS Next diagnostic was created at `artifacts/diagnostic-next-js` using Next 14.2.35/Node 24.12.0, without Clerk or Prisma.
+- It reached `Ready in 4.7s`, but direct requests from the same Codex PowerShell process failed with Windows loopback socket-permission errors. SaadStudio reaches Ready too, then dynamic requests produce socket-hang-up proxy errors while static assets work.
+- Conclusion: no standalone Next SSR failure was reproduced; the strongest reproducible cause is the Codex/Windows localhost interception boundary. No application fix was applied; Chromium pass remains unproven.
+
+# Latest task: Unified Prompt Box, Single Execution Button, and 400px Sidebar Architecture in SaadStudio /video (2026-11-04)
+- Request: Complete integration and state binding between the video settings sidebar and the central prompt box / execution button at `/video`:
+  1. Single Source of Truth Prompt Box: Central prompt textarea below preview is the exclusive text input. Removed all duplicate prompt fields from inside the sidebar. Dynamic placeholder and disabled state adapt per active tool/model. Object Swap replacement (`change_to`) is driven directly by the central prompt while keeping dedicated `target` element input in sidebar with style/chip helpers. Upscaler disables prompt with explanatory notice. Motion Control supports optional guidance.
+  2. Single Execution Button & Price Display: Button below central prompt box (`#video-unified-generate-btn`) is the SOLE execution trigger across all tabs (Create Video, Edit Video tools, Motion Control). Removed duplicate Generate/Apply buttons from inside the sidebar. Price is displayed once only next to the central button, dynamically updated with zero duplicate price badges.
+  3. Sidebar Width Fixed to 400px: Explicitly set `<aside id="video-settings-sidebar"` width to 400px (`style={{ width: 400, minWidth: 400, maxWidth: 400 }}`) and verified with Playwright via `getBoundingClientRect().width === 400` across standard desktop (1920×1080) and ultrawide (3440×1440) with `hasHorizontalScroll === false`.
+  4. Dropdowns and Collapsible Accordions: Converted resolution and scale selectors into clean native `<select>` dropdowns; folded secondary settings (reference image, swap mode switch, seed) into collapsible accordions.
+- Skills used: `frontend-design`, `ui-ux-pro-max`, `frontend-patterns`, `playwright`, `code-review`.
+- Implemented:
+  1. `components/video/EditVideoSidebarPanel.tsx`:
+     - Added `EditPanelState` export and wired `onStateChange` synchronizing `{ activeTool, isReady, calculatedCredits, buttonLabel, placeholder, isPromptDisabled, executeGenerate }`.
+     - Removed redundant Generate Swap, Upscale Video, and Apply Edit buttons from inside the sidebar.
+     - Replaced inline resolution buttons with `<select>` dropdown (`480p`, `540p`, `768p`, `1080p`).
+     - Folded secondary settings (Reference Image +1.12 cr, Swap Mode switch, Random Seed) into collapsible accordion.
+     - Upscaler converted to `<select>` dropdowns for Target Resolution (`1080p`, `2K`, `4K`) and Scale (`2x`, `4x`), setting `isPromptDisabled = true`.
+     - Added single source of truth prompt cards informing user that replacement and edit instructions are typed in the main prompt box, with live preview of `promptText` and chips calling `onAppendPrompt`.
+  2. `components/video/MotionControlSidebarPanel.tsx`:
+     - Synchronized `onStateChange` exporting `{ isReady, calculatedCredits, videoDuration, executeGenerate }`.
+     - Model (`Kling 2.6` / `Kling 3.0`) and Quality (`720p` / `1080p`) using `<select>` dropdowns; advanced settings in accordion.
+  3. `app/(dash)/(routes)/video/page.tsx`:
+     - Set `<aside id="video-settings-sidebar"` to fixed 400px width.
+     - Removed redundant sidebar Generate button on line 7036.
+     - Added `editPanelState` and `motionPanelState` management.
+     - Bound central prompt box (`#video-prompt-input`): `value={prompt}`, `placeholder={effectivePromptPlaceholder}`, `disabled={isPromptDisabled}`.
+     - Bound central execution button (`#video-unified-generate-btn`): `onClick={handleUnifiedGenerate}`, label `{effectiveButtonLabel}`, single price `{effectiveDisplayCredits} cr`, disabled `{isSubmitting || !effectiveCanGenerate}`.
+- Verification:
+  - TypeScript: `npx tsc --noEmit` passed with 0 errors.
+  - Production build: `npm run build` compiled 263 routes successfully with exit code 0.
+  - Port 57230 production server: Next.js running with HTTP 200 for all assets.
+  - Automated Playwright suite (`artifacts/verify-unified-workbench.js`):
+    - `createTabMetrics`: sidebarWidth = 400px, hasHorizontalScroll = false, duplicateExecBtnsCount = 0, centralBtnText = "توليد الفيديو · 50.4 cr".
+    - `editListMetrics`: sidebarWidth = 400px, promptDisabled = true, centralBtnText = "اختر أداة تحرير · 0 cr".
+    - `objectSwapMetrics`: sidebarWidth = 400px, promptPlaceholder = "صف العنصر البديل المراد استبداله (Change To)...", promptValue = "cyberpunk neon leather jacket with glowing circuitry", centralBtnText = "توليد استبدال العنصر · 56 cr", centralBtnDisabled = false upon test media upload, resolution select verified.
+    - `upscaleMetrics`: sidebarWidth = 400px, promptDisabled = true, promptPlaceholder = "أداة رفع دقة الفيديو لا تتطلب وصفاً نصياً", centralBtnText = "رفع دقة الفيديو · 6 cr", centralBtnDisabled = false upon test media upload.
+    - `motionMetrics`: sidebarWidth = 400px, centralBtnText = "توليد نقل الحركة · 19.6 cr", centralBtnDisabled = false upon motion video + character image upload, Kling select verified.
+    - `ultrawideMetrics` (3440×1440): sidebarWidth = 400px, hasHorizontalScroll = false.
+    - Zero paid generations dispatched.
+- Remaining: Live provider testing with WaveSpeed when requested by user.
+
+# Earlier task: Typography, Palette & Readability Refactor for Video Panel (2026-11-04)
+- Request: Improve readability and arrangement of the current video settings sidebar in SaadStudio at `/video` without changing functional behavior:
+  1. Restore original SaadStudio branding and palette: eliminate Higgsfield phosphor yellow (`#ccff00`/`#dfff00`), adopt SaadStudio Cyan (`#06b6d4`), Blue (`#2563eb`), and dark slate tones for active states, badges, buttons, and switches.
+  2. Expand sidebar width from cramped 288px to 360–400px (`w-[360px] xl:w-[384px] 2xl:w-[400px]`) without horizontal overflow or layout distortion.
+  3. Increase typography scale: section titles (16–18px), tool/model names (14–16px), fields/buttons (at least 14px), explanations (12–13px). Prevent broken line wrapping on model names.
+  4. Organize content: equal 3-column tab layout (`grid grid-cols-3`), consistent alignment for Edit Video tools/badges, clean vertical spacing in Motion Control, legible Generate button and credit counter.
+- Skills used: `frontend-design`, `ui-ux-pro-max`, `frontend-patterns`, `playwright`, `code-review`.
+- Implemented:
+  1. `components/video/MotionControlSidebarPanel.tsx`:
+     - Replaced all phosphor yellow with SaadStudio Cyan/Blue and slate tones.
+     - Scaled typography: Header (16px bold), Dropzones (14px title, 12px subtitle), Model Selector (14px title, 13px select), Quality (13px bold), Scene Mode (14px title, 13px buttons), Pricing/Generate (14px bold, 15px credits).
+     - Switch controls and dropzones updated with cyan focus/active indicators.
+  2. `components/video/EditVideoSidebarPanel.tsx`:
+     - Replaced phosphor yellow badges with Cyan `NEW` and Emerald `READY`.
+     - Scaled tool items: 14px title, 12px description, 18px icons, fixed horizontal alignment.
+     - Updated Sub-views (Object Swap, Upscale, Edit Video): 16px headers, 14px inputs, 12px chips in cyan/slate, 14px gradient CTA button.
+  3. `app/(dash)/(routes)/video/page.tsx`:
+     - Sidebar width expanded to `w-[360px] xl:w-[384px] 2xl:w-[400px]` with `flex-shrink-0`.
+     - 3-tab workflow header refactored to `grid grid-cols-3` with 13.5px bold typography and cyan-blue gradient active indicator.
+- Verification:
+  - TypeScript: `npx tsc --noEmit` passed with 0 errors.
+  - Production build: `npm run build` compiled 263 routes successfully with exit code 0.
+  - Port 57230 production server: Next.js running with HTTP 200 for all assets.
+  - Playwright visual testing:
+    - Desktop 1920×1080 (Create Video tab): `verified-desktop-1920-create.png` (verified wider sidebar, 3 equal tabs, no cramped text).
+    - Desktop 1920×1080 (Edit Video list): `verified-desktop-1920-edit-list.png` (verified 14px tool titles, brand cyan NEW badges, emerald READY badges).
+    - Desktop 1920×1080 (Object Swap tool): `verified-desktop-1920-object-swap.png` (verified cyan chips, 14px inputs, 56 cr pricing).
+    - Desktop 1920×1080 (Motion Control empty): `verified-desktop-1920-motion-empty.png` (verified 14px labels, cyan switch, clean model display without wrapping).
+    - Desktop 1920×1080 (Motion Control loaded): `verified-desktop-1920-motion-loaded.png` (sample video & character image uploaded, metadata extracted, 39.2 cr recalculated, cyan/blue gradient Generate button).
+    - Ultrawide Desktop 3440×1440: `verified-ultrawide-3440-motion.png` (verified layout integrity, no horizontal scroll, preview area expands naturally).
+    - Mobile 393×852: `verified-mobile-393.png` (verified mobile toolbar and responsive layout).
+    - Zero paid generations dispatched.
+- Remaining: Live provider testing with WaveSpeed when requested by user.
+
+# Earlier task: Unified Video Workspace Sidebar Architecture & Multi-Tab Behavioral Logic Refactor (2026-11-04)
+- Request: Refactor existing video sidebar in SaadStudio at `/video` according to user's 4 reference screenshots. Retain 100% of existing sidebar visual identity, styling, dark theme, preview workspace, and navbar. Add 3 top workflow tabs: `Create Video`, `Edit Video`, `Motion Control`. `Create Video` retains existing generation composer. `Edit Video` displays 9 editing tools matching reference with drill-down into inputs/settings. `Motion Control` displays dual upload (motion video 3-30s + character image), Kling Motion Control model, scene control mode switch (`Video` | `Image`), advanced settings, and live credit pricing.
+- Skills used: `frontend-design`, `ui-ux-pro-max`, `frontend-patterns`, `playwright`, `code-review`.
+- Implemented:
+  1. `lib/video-upload-helper.ts`: Exported `uploadVideoRequestFile`, `inferVideoUploadMimeType`, `readVideoUploadError`, and `fileToDataURL`.
+  2. `components/video/MotionControlSidebarPanel.tsx`:
+     - Built matching reference: Header banner ("MOTION CONTROL / Control motion with video references", expandable "How it works").
+     - Dual dropzones: "Add motion to copy (Video duration: 3-30 seconds)" and "Add your character (Image with visible face and body)" with metadata extraction (duration, resolution, dimensions, file size).
+     - Models: Kling 2.6 Motion Control (`kwaivgi/kling-v2.6-std/motion-control`) and Kling 3.0 Motion Control.
+     - Quality: 720p / 1080p.
+     - Scene control mode: Switch toggle with segmented control (`[ Video ]` | `[ Image ]`).
+     - Collapsible advanced settings (audio toggle, seed, prompt guidance).
+     - Dynamic credit pricing (3.92 cr/s for Kling 2.6, balance sufficiency checks, and contextual generate button states).
+  3. `components/video/EditVideoSidebarPanel.tsx`:
+     - Built matching reference: Header banner ("EDITING TOOLS / Modify, restyle, change angles, transform").
+     - 9 editing tools list: Edit Video, Extend Video, Reframe, Upscale, Remove Background, SDR to HDR, FPS Boost, Depth Map.
+     - Sub-view `object-swap`: Video dropzone (3-15s), target element input with quick chips (`+jacket`, `+hair`, `+car`, etc.), change_to input with style chips, optional reference image (+1.12 cr), swap mode (`change` | `background`), resolution (480p-1080p), dynamic credit formula `((duration * rate + refFee) * 1.4 * 40)`.
+     - Sub-view `upscale`: Video dropzone, target resolution (1080p, 2K, 4K), scale factor (2x, 4x), dynamic pricing.
+     - Sub-view `edit-video`: Video dropzone, prompt input, duration, dynamic pricing.
+     - Sub-view `extend-video`: Seamless switch to video extension mode in main composer.
+  4. `app/(dash)/(routes)/video/page.tsx`:
+     - Integrated `mainWorkflowTab` state (`"create" | "edit" | "motion"`) and `activeEditTool` state.
+     - URL search param parsing (`tab` and `tool`) for deep linking and backward compatibility.
+     - Top workflow tab strip with active bottom indicator inside the sidebar.
+     - Preserved all existing models, references vs frames mode, credit calculations, sound toggle, and polling engine.
+  5. Route preservation:
+     - `app/(dash)/(routes)/video-tools/motion-transfer/page.tsx`: Redirects to `/video?tab=motion`.
+     - `app/(dash)/(routes)/video-tools/object-swap/page.tsx`: Redirects to `/video?tab=edit&tool=object-swap`.
+     - `app/(dash)/(routes)/video-tools/[tool]/page.tsx`: Routes tools into `/video?tab=...`.
+- Verification:
+  - TypeScript: `npx tsc --noEmit` passed with 0 errors.
+  - Production build: `npm run build` compiled 263 routes successfully with exit code 0.
+  - Port 57230 production server: Next.js running with HTTP 200 for all assets.
+  - Playwright visual testing:
+    - `verified-video-create-tab.png`: Verified default tab with existing generation composer.
+    - `verified-video-edit-tools-list.png`: Verified Edit Video list matching 9 tools from reference.
+    - `verified-video-edit-object-swap.png`: Verified Object Swap tool drill-down with chips, swap mode, and 56 cr pricing.
+    - `verified-video-edit-upscaler.png`: Verified Video Upscaler tool drill-down.
+    - `verified-video-motion-control.png`: Verified Motion Control panel with dual upload, Kling selector, and scene control mode switch.
+    - `verified-video-motion-control-loaded.png`: Uploaded sample video and character image, verified duration/resolution readback, 39.2 cr recalculation, and generate button readiness.
+    - Route preservation: `/video-tools/motion-transfer` -> `/video?tab=motion`; `/video-tools/object-swap` -> `/video?tab=edit&tool=object-swap`.
+    - Zero paid generations dispatched.
+- Remaining: Live provider testing with WaveSpeed when requested by user.
+
+# Earlier task: Redesign Object Swap Studio interface & Port 57230 Layout Fix (2026-11-04)
+- Request: Complete professional redesign of the Object Swap interface at `/video-tools/object-swap` to match high-end cinematic video production standards (Dark Cinematic UI, glassmorphism, 3-column studio layout, live preview, comparison slider, real WaveSpeed OpenJutsu contracts, credit pricing, full responsiveness). Fix layout breakage reported on port 57230.
+- Skills used: `frontend-design`, `ui-ux-pro-max`, `frontend-patterns`, `playwright`, `code-review`, `systematic-debugging`.
+- Port 57230 Diagnosis & Root Cause:
+  - Symptoms: Unstyled page, collapsed layout, text stacked on right (RTL), default browser buttons, MIME type refusal errors in browser console (`Refused to apply style ... because MIME type ('text/html') is not a supported stylesheet MIME type`).
+  - Cause: A background `next dev --hostname localhost --port 57230` process (PID 83932) had been running since 1:35 AM. When `next build` was subsequently executed, it wiped the `.next` development assets and replaced them with production-hashed files. The stale `next dev` server continued searching in-memory for dev assets (`app/layout.css`), resulting in 404 HTML responses for all stylesheets and JavaScript bundles.
+  - Fix: Terminated stale processes on port 57230, purged corrupted `.next`, performed a clean `npm run build`, and launched `next start -p 57230`. All CSS and JS assets are now served with HTTP 200 and proper MIME types (`text/css`, `application/javascript`).
+- Implemented:
+  1. `components/video-tools/ObjectSwapStudio.tsx`: Full-featured 3-column cinema studio:
+     - Left Column: Video drag-and-drop zone (MP4/MOV/WEBM up to 50MB with instant preview, metadata extraction: duration, resolution, size), target element selector (`target`) with quick chips (`+jacket`, `+hair`, `+car`, `+shoes`, `+shirt`, `+glasses`, `+sky`, `+watch`), replacement descriptor (`change_to`) with style chips (`+cyberpunk neon...`, `+golden luxury...`, `+futuristic metallic...`), and optional reference image input (+1.12 cr).
+     - Center Column: Cinematic studio hero viewport with camera brackets, standby radar mode with step-by-step readiness checks, active generation state with 4-stage pipeline progress and live timer, completed state with full video player, interactive draggable Before/After comparison curtain slider, and MP4 direct download.
+     - Right Column: Official WaveSpeed OpenJutsu Object Swap settings (`wavespeed-ai/openjutsu/object-swap`), 2 swap modes (`change`, `background`), 4 resolutions (`480p`, `540p`, `768p`, `1080p`), 3-15s duration slider and quick chips, optional prompt, collapsible advanced settings (seed, negative prompt).
+     - Pricing Station: Dynamic exact credit quote calculated per formula `((duration * rate + refFee) * 1.4 * 40)`, live user credit balance fetching via `/api/editor/credits`, balance sufficiency checks, and contextual generate button states.
+  2. `app/(dash)/(routes)/video-tools/object-swap/page.tsx`: Dedicated static route page with metadata.
+  3. `app/(dash)/(routes)/video-tools/[tool]/page.tsx`: Delegated rendering for "object-swap" to `<ObjectSwapStudio />` while keeping "motion-transfer" and "video-upscaler" intact.
+- Verification:
+  - TypeScript: `npx tsc --noEmit` passed with 0 errors in touched files.
+  - Production build: `npm run build` compiled 263 routes successfully including `/video-tools/object-swap` and `/video-tools/motion-transfer`.
+  - Playwright visual testing on port 57230: Verified on Desktop (1440x900) and Mobile (393x852) with 0 CSS/JS errors.
+  - File upload and metadata extraction verified: Sample motion video and reference image loaded, tags selected, center stage checklist transitioned to ready, pricing dynamically calculated (e.g. 10s @ 1080p + ref fee = 225.12 cr), and generate button activated.
+  - Zero paid generations dispatched to protect user credits.
+- Remaining: Production testing with live WaveSpeed credentials when user is ready.
+
+# Earlier task: Redesign Motion Transfer Studio interface (2026-11-04)
+- Request: Complete professional redesign of the Motion Transfer interface at `/video-tools/motion-transfer` to match high-end cinematic video production standards (Dark Cinematic UI, glassmorphism, 3-column studio layout, live preview, comparison slider, real WaveSpeed Kling 2.6 contracts, credit pricing, full responsiveness).
+- Skills used: `frontend-design`, `ui-ux-pro-max`, `frontend-patterns`, `playwright`, `code-review`.
+- Implemented:
+  1. `components/video-tools/MotionTransferStudio.tsx`: Full-featured 3-column cinema studio:
+     - Left Column: Dual drag-and-drop media cards for Motion Video (MP4/MOV/WEBM up to 50MB with instant preview, audio status, duration, resolution, size extraction and duration sync) and Character Image (PNG/JPG/WEBP up to 15MB with dimension & aspect ratio extraction).
+     - Center Column: Cinematic studio hero viewport with camera corner brackets, radar standby mode with step-by-step readiness checks, active generation state with 4-stage pipeline progress and live timer, completed state with full video player, interactive draggable Before/After comparison split slider, and MP4 direct download.
+     - Right Column: Official WaveSpeed Kling 2.6 Motion Control settings (kwaivgi/kling-v2.6-std/motion-control), 5 character orientation modes (video, image, front, side, back), 720p/1080p resolution, 3-30s duration slider and chips, keep original sound toggle, optional prompt, collapsible advanced settings (seed, negative prompt).
+     - Pricing Station: Dynamic exact credit quote calculated per second (duration * 3.92 cr/s = duration * 0.07 * 1.4 * 40), live user credit balance fetching via `/api/editor/credits`, balance sufficiency checks, and contextual generate button states.
+  2. `app/(dash)/(routes)/video-tools/motion-transfer/page.tsx`: Dedicated static route page with metadata.
+  3. `app/(dash)/(routes)/video-tools/[tool]/page.tsx`: Delegated rendering for "motion-transfer" while preserving object-swap and video-upscaler.
+- Verification:
+  - TypeScript: `npx tsc --noEmit` passed with 0 errors in touched files.
+  - Production build: `npm run build` compiled 262 routes successfully including `/video-tools/motion-transfer`.
+  - Playwright visual testing: Verified on Desktop (1440x900) and Mobile (393x852).
+  - File upload and metadata extraction verified: Sample character image (960x540, 16:9) and motion video (1280x716, 5s) loaded, metadata displayed, center stage transitioned to ready, and generate button activated.
+  - Zero paid generations dispatched to protect user credits.
+- Remaining: Production testing with live WaveSpeed credentials when user is ready.
+
+# Earlier task: AutoCard.jsx for the "سيفي احمر 2" After Effects card (2026-10-14)
+- Request: a mechanism to paste a script and have the card fill itself — line 1 = Headline, every other line = one Subtitle on its own part, one image on all cards, End Card auto-placed after the last used part; script length varies.
+- Delivered outside the repo: `E:\كارتات العراقية\سيفي\سيفي احمر 2 folder\AutoCard.jsx` (ExtendScript, run via File > Scripts in AE). Pastes/loads text, picks image, fills `Main Headline`/`Headline`, `Subtitle N` per `part NN`, removes unused parts or clones the last part + its Subtitle comp, re-times End Card/music/overlays by the computed delta, resizes comp durations, replaces the still footage used by comp `Image` project-wide (cover fit), saves a new copy in `Output\` first.
+- NOT verified in AE: owner chose "build blind" (AE was open; inspecting would have swapped their loaded project). Structure was inferred from the collect report (comps: part 01-14, Subtitle 1-14, Main Headline, Headline, Image, End Card). Only a Node syntax check passed. Likely first-run adjustments: main-comp detection, End Card offset, overlays tied to parts.
+- Decision: the script never edits the template — it Save-As's to `Output\` before touching anything.
+
+# Earlier task: Explicit References vs Start/End input mode in the video panel (2026-10-06)
 - Request: separate models that support reference media from models that support start/end frames so the panel shows only the inputs the selected model can actually use, following the Higgsfield tab pattern. Pricing work was explicitly deferred by the owner.
 - Problem: 19 of 35 registry models declare reference input AND start/end input at once, so both panels rendered together. Providers expose these as separate endpoints with disjoint parameters (7 models carry both `reference_api_route` and `start_end_api_route`; `minimax-h3`, `minimax-h3-max`, `alibaba-wan-3.0-video` carry `reference_api_route` + `image_api_route`), so one request can only be one mode. The old code inferred the mode from whichever box was filled, with references winning priority, which silently discarded a filled start frame.
 - Implemented in `app/(dash)/(routes)/video/page.tsx` only: new `InputMode` type; `inputMode` state; `supportsReferenceInput` / `supportsFrameInput` / `inputModeChoices` / `showInputModeTabs` / `referenceModeActive` / `frameModeActive` derived from registry capabilities; a References/Frames switcher rendered only when a model offers both; `selectModel` resets the mode per model; an effect keeps the mode valid when capabilities change.
@@ -16427,3 +16642,469 @@
 - Preserved: no pricing, credits, spendCredits, ledger, auth, provider key, or model route changes. No paid provider generation was executed.
 - Verification: targeted Vitest passed 24/24 across `test/hailuo-contract.test.ts`, `test/minimax-h3-pricing-crash.test.ts`, and `test/model-capability-badges.test.ts`. `npm run build` passed with the existing Next dynamic-server and Browserslist/Tailwind warnings.
 - Remaining: commit/push only if explicitly requested.
+# Latest task: Saad Influencer Studio implementation (2026-10-10)
+- Request: implement a new independent `/influencer-studio` page from the 13-report WaveSpeed audit. Do not modify the existing Shots, Cinema Flow, Cinema Studio, or other routes.
+- Implemented new files: `app/(dash)/(routes)/influencer-studio/page.tsx`, `components/influencer-studio/InfluencerStudioPage.tsx`, and `lib/influencer-studio-capabilities.ts`.
+- UI scope: independent Create / Photos / Videos workflows, preset influencer picker, Look/Hair/Style/Niche dialogs, scene/action/product dialogs, model/ratio/resolution/duration/output controls, result view, RTL-ready content direction hook point, and responsive dark navy/gold Saad visual treatment.
+- Execution: Create/Photos call the existing authenticated `/api/generate/image` route; Videos call the existing authenticated `/api/video` route with an idempotency key. No provider secret is exposed in browser code. Models without a verified active Saad route are listed but disabled instead of silently remapped.
+- Persistence: successful Create attempts to persist the first returned image as a `UserCharacter` through `/api/characters`; existing UserCharacter/UserElement, storage, ledger, generation, and provider routes were reused without altering their behavior.
+- Verification: TypeScript transpile syntax check passed for new TS/TSX files. Full `next build` was started but terminated after the repository build produced no output for the available check window; no paid generation was performed. Git shows only the three new paths plus this memory update.
+- Known limitations: product/start-photo UI currently accepts URL directly; signed-file uploader wiring and authenticated quote display need a follow-up. Full integration/E2E, live provider execution, and final pricing are not yet verified. Do not mark Production Ready.
+# Latest audit correction: Saad Influencer Studio (2026-10-10)
+
+- المرحلة: تدقيق وظيفي وتشغيل محلي؛ المسار `/influencer-studio` يعمل ويعيد HTTP 200 بعد تجميع أولي استغرق نحو 24 ثانية.
+- التصحيحات: quote server عبر `/api/video/quote` و`/api/pricing/quote`، رصيد Clerk عبر `/api/influencer-studio/credits`، signed upload عبر `/api/studio/upload-url` للمرجع/البداية/المنتج مع فحص image MIME وحد 20MB، polling لمهمة الفيديو، وإدخال Hair/Style/Niche في prompt واتجاه RTL/LTR.
+- التحقق: TypeScript مرّ بلا أخطاء؛ ESLint مرّ بلا أخطاء مع تحذيرات hooks و`<img>` فقط؛ `git diff --check` مرّ. Playwright/CUA فتح الصفحة وأظهر Create وPhotos وVideos والعناصر الأساسية؛ Console لم يسجل أخطاء، والطلبات غير الموثقة لـ `/api/characters` و`/api/influencer-studio/credits` أعادت 401 كما ينبغي.
+- القيود: لم ينفذ توليدًا مدفوعًا ولا رفعًا فعليًا بدون جلسة مصادق عليها. لم يُثبت بعد production build أو unit/integration suite أو اختبار mobile/RTL الكامل. واجهة browser locator أظهرت صعوبة في اختيار تبويبات متشابهة، لذلك يلزم إعادة اختبارها بمحددات DOM موثوقة.
+- أخطاء/قرارات: quote endpoint العام يعيد تكلفة الخادم، أما الرصيد فأضيف له مسار Clerk مستقل كي لا نستخدم endpoint لوحة Premiere المحمي برمز منفصل. تم إخفاء اختيار Outputs في الفيديو لأن `/api/video` لا يعرّف batch contract موثوقًا.
+- نتائج إضافية: `npm run build` و`npx vitest run --passWithNoTests` بدآ بنجاح لكن لم يصلا إلى نتيجة ضمن نافذة التنفيذ 30 ثانية؛ ظهرا في حالة إنشاء build/تشغيل Vitest دون خطأ صريح، ويجب إعادة تشغيلهما بمهلة أطول في بيئة CI. لا يوجد ادعاء نجاح لهذين الفحصين.
+- تدقيق بصري لاحق: تم إنشاء أصل contact sheet مولد فعليًا ثم قصّه إلى 16 صورة مستقلة في `public/influencer-studio/characters/`، وأضيفت صور Hero متداخلة ومعرض 8×2 ببطاقات صور وتدرج ونص وحالات hover/selected. Screenshot النهائي محفوظ خارج المستودع في `influencer-studio-visual-v2.png`. سجل Console المتبقي سببه Clerk Production Keys المقيدة بنطاق `saadstudio.app` عند التشغيل على localhost، وليس خطأً في مكونات الصفحة.
+- تصحيح أسماء الموديلات (2026-10-10): استبدل سجل الواجهة `label` بـ `displayName` مستقل عن `id` و`route`، وأصبحت القوائم تعرض الأسماء المطلوبة حرفيًا دون API IDs أو كلمة `unavailable`. حالة unavailable بقيت داخلية عبر disabled option، مع إبقاء model route والتسعير server quote دون تغيير. تم التحقق بصريًا من Create/Photos وVideos؛ أسماء الفيديو العشرة ظهرت مطابقة للمطلوب. لقطات القوائم محفوظة في `model-list-photos.png` و`model-list-videos.png` ضمن مجلد أدلة الجلسة.
+# 2026-10-10 — Approved influencer character library extraction
+
+- Extracted the approved 8×2 reference collage into 16 independent WEBP assets under `public/influencer-studio/characters/`, preserving the required order and filenames (`luna.webp` through `sol.webp`). Removed the obsolete JPG character assets.
+- Updated `components/influencer-studio/InfluencerStudioPage.tsx` to use the WEBP assets for hero, gallery, and influencer preset selection. Preset selection now stores the real character image URL; generation no longer falls back to a display label as a reference URL.
+- Validation: targeted ESLint passed with warnings only (existing hook dependency and `<img>` optimization warnings); targeted TypeScript output contains no InfluencerStudio errors. Local browser verified 16 gallery cards, required order, and WEBP asset URLs. No paid generation was submitted.
+- Remaining limitation: the local browser can retain previously persisted server/local generation records referencing removed legacy JPGs; those records are outside the current asset registry and should be treated as stale data. Local Clerk production-key warnings also remain environment-related.
+- Updated the Videos Action modal to use six image cards (Talk to camera, Street walk, Dance, Get ready with me, Unboxing, Product review) with real WEBP assets while preserving the existing action values and video request payload.
+- Re-audited against the live WaveSpeed page: the local route had stopped after the editor/results area, while the reference continues with a showcase, FAQ, CTA, and footer. Added matching showcase, FAQ, and CTA sections so a full-page review is possible instead of a middle-only crop.
+- Compressed the Influencer composer with a scoped page style: max-width 64rem, tighter padding, shorter prompt, compact selects, and a narrower desktop rail to match the supplied WaveSpeed reference box.
+- Locked the composer geometry to LTR for both language modes so RTL changes text flow/alignment without reversing columns, tabs, controls, or button positions.
+- Cinema Studio correction: removed the temporary `/cinema-studio` route that pointed to the legacy `CinemaStudioVSO` component. The current WaveSpeed Cinema reference requires a separate implementation; the legacy page must not be reused.
+- Added a new standalone `CinemaStudioPage` and `/cinema-studio` route. It uses the current reference structure: cinematic hero strip, director panel, references, prompt composer, camera-move chips, model controls, and free-generation CTA. It does not import Shots or the legacy Cinema component. Targeted TypeScript and ESLint checks produced no Cinema errors.
+- Removed the middleware redirect that forced `/cinema-studio` to `/shots`. The new route now resolves independently and was browser-verified at `http://localhost:3000/cinema-studio`; the old Shots page remains untouched.
+- 2026-10-11 Cinema correction: live source and dialog geometry captured; 36 reference WEBP files acquired; hero rebuilt with five selectable takes. Local route still incomplete and not visually accepted. Detailed remaining work: docs/cinema-studio-visual-audit.md. Found and fixed unescaped apostrophe lint error; no paid generation performed.
+- 2026-10-11 composer correction: replaced the rejected tall two-column director panel with five top cards, external Video/Image rail, 56px prompt, 32px compact toolbar, and Generate/Credits column. Scoped CSS: components/cinema-studio/composer.module.css. Browser screenshot verified the new structure on /cinema-studio; ESLint passed with three image warnings. Model/settings/quote/upload dialogs remain incomplete and explicitly do not dispatch generation.
+- 2026-10-11 actual References integration started: ReferenceLibrary.tsx now calls existing /api/studio/upload-url and performs signed PUT uploads; /api/assets supplies library rows. Selected reference objects are held by CinemaStudioPage and drive the counter. Client file type and 100MB validation added. ESLint passes with four img warnings. Live authenticated upload, generation reference forwarding, preset modals, quote, and generation remain unverified/incomplete; do not claim complete integration.
+- 2026-10-11 applied owner-provided dark CSS tokens inside Cinema CSS module only; browser verified background rgb(23,23,23), foreground white. Geist font is still unavailable locally and uses Arial fallback; not a typography match yet. ESLint passed with three image warnings.
+- Camera HTML supplied by owner implemented as CameraSetup.tsx: Setup/Movement sidebar, Camera/Lens/Aperture columns, previous/next, selection and Reset all. Overlay now 70% black and z-index 1000; Camera dialog maximum width 1000px. State retained in CinemaStudioPage. Source icons replace missing non-Auto product images for now; generation payload connection and browser verification remain pending. ESLint passes.
+- Film setup placeholder replaced by FilmSetup.tsx, with Genre/Era/Tempo tabs, rotating three-card carousel, previous/next, persisted selections and Reset all. Only verified subset of source options implemented: Genre Auto/Epic/Noir/Horror/Action; Era Auto/1980s; Tempo Auto/Dynamic. Full source catalog, distinct slow-tempo assets and generation linkage still missing. Do not claim full completion.
+- Camera re-audited live via cycling all three source columns. Verified 5 cameras including Auto, 6 lenses including Auto, 4 apertures including Auto. CameraSetup now centers selected option with previous/next neighbors rather than fixed list; mapped actual source product images. Browser bundling and sandbox downloads failed for several assets; elevated download retry is pending. ESLint passes; live local screenshot validation remains pending.
+
+# تحديث إصلاح مسار الصور المرجعية و /api/assets (2026-10-11)
+- عطل Console كان يجمع مشكلتين مرتبطتين: `/api/assets` كان ينتظر مصالحة مهام خارجية عند فتح المعرض، وأي بطء/تعليق في Status API لمزوّد خارجي خلف Docker/Caddy يمكن أن يمنع المعرض من الرجوع ويظهر كـ502. أصبح هذا العمل opportunistic بمهلة قصيرة، ولا يمنع إرجاع الأصول المخزنة.
+- مسار `/api/generate/image` كان يتحقق من قابلية رابط الريفرنس للوصول فقط. أصبح يشترط أيضاً أن يكون الرابط صورة فعلية قابلة للفك (`image/*` أو توقيع JPEG/PNG/WebP/GIF/AVIF) قبل الخصم أو إرسال الطلب للمزوّد.
+- رفع Data URL من المتصفح يبقى عبر `resolveProviderMediaUrl` إلى التخزين الدائم، ثم يتحقق الخادم من الرابط العام الناتج قبل أي `spendCredits` أو `recordFreeGeneration`.
+- لم يتغير نظام الكريديت أو الاشتراكات أو الأسعار أو قاعدة البيانات. فشل الريفرنس قبل التحقق يمنع الخصم كما كان مطلوباً.
+- التحقق: `npm test -- --run test/assets-route.test.ts test/public-url-resolver-media-kind.test.ts test/reference-failure-is-loud.test.ts` نجح 11/11. `npx tsc --noEmit` ما زال يفشل بأخطاء قديمة خارج هذا الإصلاح. `npm run build` فشل بسبب حظر الشبكة عن Google Fonts `Caveat` في البيئة المحلية، وليس بسبب الملفات المعدلة.
+
+## فحص شامل لمسارات الوسائط المرجعية (2026-10-11)
+- وُسّع تحقق الوسائط المرجعية ليشمل الصور والفيديو والصوت قبل الخصم وقبل إرسال أي طلب للمزوّد، عبر lib/media/public-url-resolver.ts ومسارات التوليد الفعلية.
+- أصبح erifyPublicMediaUrl يتحقق من Content-Type ومن توقيع الملف الفعلي للصور والفيديو والصوت، ويرفض الملفات التالفة أو النوع غير المطابق حتى لو كان الرابط قابل الوصول.
+- المسارات التي أضيف لها تحقق قبل الكريديت/المزوّد: /api/generate/image, /api/panel/generate/image, /api/video, /api/panel/generate/video, /api/generate/audio, /api/panel/generate/captions, /api/panel/generate/transition, /api/panel/generate/avatar-pro, /api/panel/generate/expand, /api/generate/face-swap, /api/generate/upscale.
+- مراجع الصور في توليد الصور لم تعد تُسقط جزئياً بصمت؛ أي مرجع مرفق يفشل التحميل أو التحقق يوقف الطلب قبل الخصم.
+- فيديوهات وصوتيات الريفرنس، Start Frame وEnd Frame، وMultiple References تمر الآن عبر resolve/verify قبل أي provider dispatch. لا تغيير في الأسعار أو الاشتراك أو ledger أو Prisma.
+- الاختبارات المركزة:
+pm test -- --run test/public-url-resolver-media-kind.test.ts test/reference-failure-is-loud.test.ts test/reference-media-routes.test.ts test/assets-route.test.ts نجحت 18/18.
+-
+px tsc --noEmit ما زال يفشل بأخطاء قديمة خارج هذا التصحيح: .next/types exports، drama-studio/xplore typing، وInlineChargeInput profileId في مسارات موجودة.
+-
+pm run build فشل بسبب حظر جلب Google Font Caveat في البيئة الحالية (connect EACCES)، وليس بسبب مسارات الوسائط.
+
+## تحقق ما قبل نشر إصلاح الوسائط المرجعية (2026-10-11)
+- تمت مراجعة إصلاح الوسائط بعد نجاح 20/20 اختباراً، ووجدت نقطة إضافية في `app/api/video/route.ts`: فروع Seedance الرسمية وGoogle Veo كانت لا تزال تقبل تحقق وصول عام لبعض المراجع، وبعضها كان يسقط المرجع الفاشل بصمت. تم تحويلها إلى fail-closed مع `expectedMediaKind` للصورة/الفيديو/الصوت قبل أي خصم أو dispatch.
+- تم تحسين `lib/media/public-url-resolver.ts` حتى يقرأ أول 64 بايت فقط من جسم الملف عند فحص التوقيع، حتى لو تجاهل التخزين أو CDN ترويسة Range وأرجع 200 بدلاً من 206. هذا يمنع تحميل فيديو/صوت كبير كاملاً إلى الذاكرة أثناء التحقق.
+- تم توسيع قبول التواقيع المدعومة فعلياً: MP4/MOV/WebM للفيديو، وMP3/WAV/Ogg/FLAC/M4A/AAC للصوت، مع الاعتماد على content-type الصوتي لقبول حاويات ISO BMFF الصوتية مثل audio/mp4.
+- اختبارات الوسائط المركزة بعد التصحيح: `npm test -- --run test/public-url-resolver-media-kind.test.ts test/reference-failure-is-loud.test.ts test/reference-media-routes.test.ts test/assets-route.test.ts test/generate-inline-routes.test.ts` = 5 ملفات / 22 اختباراً ناجحة.
+- `npx tsc --noEmit` ما زال يفشل على أخطاء قديمة خارج نطاق الوسائط، منها exports غير صالحة في Next route وحقول `profileId` في inline charge وحقول صفحات dashboard. لم تظهر أخطاء جديدة تخص التحقق المركزي.
+- `npm run build` يفشل في sandbox بسبب منع الوصول إلى Google Fonts، لكنه نجح عند تشغيله بصلاحية شبكة لتحميل `Caveat`. بقيت warnings قديمة عن `composer.module.css` وTailwind ambiguous class وDynamic server usage أثناء static generation، ولم توقف البناء.
+- لم يتم تنفيذ توليد مدفوع، ولم يتم تغيير الأسعار أو الاشتراكات أو ledger أو Prisma schema أو إعدادات الإنتاج.
+
+## إصلاح ظهور Seedance 2.5 وSeedance 2.5 Turbo في قائمة الفيديو (2026-10-11)
+- السبب: السجل كان يحتوي بطاقة `bytedance-seedance-v25-t2v-turbo` فقط، لكنها كانت تسمى `Seedance 2.5`، بينما بطاقة `bytedance/seedance-2.5/text-to-video` القياسية غير موجودة كبطاقة مستقلة. لذلك لم يظهر الاسمان الصحيحان معاً في قائمة `/video`.
+- أضيفت بطاقة `bytedance-seedance-v25-t2v` باسم `Seedance 2.5` ومسار `bytedance/seedance-2.5/text-to-video`، بدقات `480p/720p/1080p/4k`، مدة `4-30s`، نسب `16:9/9:16/4:3/3:4/1:1/21:9`، ومراجع `30 images / 10 videos / 10 audios` حسب مرجع WaveSpeed.
+- صُحح اسم البطاقة الموجودة إلى `Seedance 2.5 Turbo` ومسارها بقي `bytedance/seedance-2.5/text-to-video-turbo`، بدقات `720p/1080p` فقط، ومدة `4-30s`، ونفس حدود المراجع حسب المرجع.
+- تم تحديث ترتيب عرض موديلات Seedance 2.5 حتى تظهر البطاقة القياسية ثم Turbo، مع إبقاء بطاقات I2V الداخلية مخفية كما كانت.
+- تم تحديث resolver في صفحة `/video` حتى يرسل Start/End Frames من البطاقة القياسية إلى `bytedance/seedance-2.5/image-to-video`، ومن Turbo إلى `bytedance/seedance-2.5/image-to-video-turbo`، بينما تبقى المراجع على مسارات text/reference.
+- لم تتغير أسعار البيع أو نظام الكريديت أو الاشتراكات، لكن تم ضمان أن مسار 4K القياسي لا يقع على fallback غير مسعّر.
+- اختبارات Seedance المركزة نجحت: `test/seedance-reference-video-routing.test.ts` = 4/4، وفلتر `Seedance 2.5` = 3/3، وفلتر `visible Seedance` = 1/1، وفلتر `async charge helpers` = 1/1. فشل typecheck الكامل ما زال بسبب أخطاء قديمة خارج النطاق.
+
+## إصلاح fail-closed لتخزين Backblaze B2 ورفع المراجع (2026-10-11)
+
+- تم إيقاف fallback صامت من كاتب التخزين النشط Backblaze B2 إلى Supabase عند فشل الكتابة، لأن ذلك كان يخفي خطأ `AccessDenied: not entitled` وقد ينتج حالة تخزين غير متسقة.
+- `putObject` ورفع Buffer/URL عبر runtime يغلّفان فشل الكتابة في `StorageWriteError` مع تصنيف `storage_write_denied` عند AccessDenied/403/not entitled.
+- `resolveProviderMediaUrl` لم يعد يرجع رابط B2 عام إذا لم يثبت وجود الملف في B2 أو نجاح ترحيله من مصدر legacy؛ يفشل الطلب قبل provider dispatch.
+- لا تغيير في الأسعار أو الاشتراكات أو أرصدة المستخدمين أو Prisma schema، ولم يتم تنفيذ أي توليد مدفوع أو نشر إنتاجي.
+- التحقق: اختبارات التخزين/الوسائط المركزة نجحت 35/35، و`npm run build` نجح. `npx tsc --noEmit` و`npm test -- --run` ما زالا يعرضان إخفاقات قديمة خارج ملفات التخزين.
+
+## 2026-10-11 13:53:32 +03:00 — Storage restoration deploy prep
+- Prepared clean deployment commit 86b5bd on deploy/media-reference-assets-5f27d84 from production-based worktree.
+- Scope: shared storage failure handling, active B2 write fail-closed behavior, dynamic Backblaze public URL bucket handling, /api/media fallback URL resolution, and scripts/verify-b2-storage.mjs for safe B2 upload/download diagnostics.
+- Verification: focused storage/media tests passed; production build passed. Local real B2 verification is blocked because local environment has no B2 credentials; production verification must run on Contabo with real Docker env before restart.
+- No paid provider generation, no database migration, no pricing/credit/subscription changes, no production deploy.
+
+## 2026-10-11 18:20:56 +03:00 — Image composer drag/drop polish
+- Fixed /image composer drag/drop behavior so image file drags show a stable overlay over the prompt editor, use copy drop effect, and avoid browser-level file drops disrupting the page.
+- Scope: pp/(dash)/(routes)/image/page.tsx only. No storage, billing, pricing, auth, provider execution, or deployment changes.
+- Verification: 
+px tsc --noEmit --incremental false --pretty false still fails on pre-existing/out-of-scope TypeScript errors; no new error references the modified image page.
+
+## 2026-10-11 18:26:00 +03:00 — Video reference blob preview fix
+- Fixed /video reference media previews so object URLs remain stable while files are attached and are revoked only when a file is removed or the page unmounts. This addresses console lob:... ERR_FILE_NOT_FOUND from revoked preview URLs.
+- Also replaced inline URL.createObjectURL in the mobile reference preview list with the shared stable preview URL.
+- Scope: pp/(dash)/(routes)/video/page.tsx only for this issue. No storage, billing, pricing, auth, provider execution, or deployment changes.
+- Verification: 
+px tsc --noEmit --incremental false --pretty false still fails on pre-existing/out-of-scope errors; the two new Map iteration errors were fixed and no remaining error references this preview change.
+
+## 2026-10-11 18:49:25 +03:00 — Seedance 2.5 / 2.5 Turbo local implementation
+- Scope: Implemented local Seedance 2.5 and Seedance 2.5 Turbo routing/validation according to مرجع سيدانس.docx without push/deploy.
+- Files affected: lib/video-model-registry.ts, lib/dynamic-model-loader.ts, lib/seedance-validation.ts, pp/api/video/route.ts, pp/(dash)/(routes)/video/page.tsx, 	est/seedance-reference-video-routing.test.ts.
+- Decisions:
+  - Public Seedance 2.5 list exposes only Seedance 2.5 and Seedance 2.5 Turbo; standalone I2V/Spicy variants remain internal/hidden for route support.
+  - Text/reference routes use eference_images, eference_videos, eference_audios; Image-to-Video uses explicit image and optional last_image only.
+  - Seedance 2.5 I2V no longer promotes reference images into start/end frames.
+  - Turbo rejects unsupported 480p/4k in backend validation instead of silently downgrading.
+  - UI defaults for Seedance 2.5 are duration 5s, aspect 16:9, resolution 720p; prompt reference tags display lowercase @image1, @video1, @audio1.
+- Verification:
+  - 
+px vitest run test/seedance-reference-video-routing.test.ts passed: 9/9 tests.
+  - 
+px tsc --noEmit --incremental false --pretty false still fails on pre-existing unrelated errors: route export checks for image/profiles/video, drama-studio isRTL, explore camera movement 
+ame, inline credit profileId, image provider result fields, and DynamicVideoModel.provider.
+- Remaining:
+  - No paid generation was run. No pricing, subscriptions, credits, Backblaze, Contabo, push, or deploy changes were made.
+  - Commit not created because the working tree contains pre-existing unrelated local changes; stage/commit must be scoped explicitly if requested.
+
+## 2026-10-11 19:11:55 +03:00 — Seedance 2.5 4K source pricing alignment
+- Updated Seedance 2.5 4K discounted provider rate from $0.360/s to $1.620/s based on WaveSpeed source evidence: ytedance/seedance-2.5/image-to-video at 4K costs $9.00 sticker and $8.10 after 10% discount for 5 seconds.
+- Affected pricing paths: lib/credit-pricing.ts, lib/pricing.ts, and lib/provider-tariff-registry.ts; updated pricing tests in 	est/provider-cost-audit.test.ts and 	est/pricing-core.test.ts.
+- Resulting Saad credit charge for Seedance 2.5 4K / 5s with current 1.4 margin and 40 credits/USD is 453.6 cr.
+- Verified focused tests: 
+px vitest run test/provider-cost-audit.test.ts test/seedance-reference-video-routing.test.ts passed 18/18; 
+px vitest run test/pricing-core.test.ts -t "keeps async charge helpers in parity" passed 1/1.
+- Broad pricing test run still has pre-existing/out-of-scope failures for Google/Veo, Wan, Gemini, and Minimax provenance expectations; no commit/push/deploy was performed.
+
+## 2026-10-11 19:30:16 +03:00 — Seedance 2.5 complete release branch prepared
+- Prepared isolated release branch deploy/seedance-25-complete in worktree ..\seedance-25-complete-release from production base 86b5bdb21880cb0306179ca293e870b32206e44.
+- Integrated pricing commit 38631a34dd34eb748bb7f741de6df0afef23adaa as release commit 7b0a7f3, then added Seedance 2.5 UI/API/validation release commit 22bb4fbad31514aeb621ec1d0514daaf204a330f.
+- Production-bound files in the release branch are limited to Seedance/pricing paths: app video page, app/api/video route, dynamic/video registries, seedance validation, pricing/tariff files, and related tests. Cinema, Influencer, Drama, Explore, CSS, middleware, and unrelated local changes were not included.
+- Verification in the release worktree: Seedance/provider pricing focused tests passed 18/18; pricing async parity filter passed 1/1; storage/media tests passed 23/23; git diff --check passed; 
+pm run build passed with existing dynamic-server and Browserslist/Tailwind warnings.
+- 
+px tsc --noEmit --incremental false --pretty false still fails on pre-existing/out-of-scope TypeScript errors in drama-studio, explore, inline charge/image routes, and DynamicVideoModel.provider in app/api/video. No paid generation, push, or deploy was performed.
+
+## 2026-10-11 20:13 +03:00 — Seedance 2.5 release verification
+- Worktree checked: seedance-25-complete-release, branch deploy/seedance-25-complete, base release commit 22bb4fbad31514aeb621ec1d0514daaf204a330f.
+- Fixed the DynamicVideoModel.provider TypeScript error by adding an explicit optional provider field to lib/dynamic-model-loader.ts; no cast was used for this fix.
+- Verification results: Seedance/reference routing tests passed 18/18, pricing parity focused test passed 1/1, media regression tests passed 23/23, production build passed. Full 	sc --noEmit still fails on pre-existing non-Seedance errors and the pre-existing route export issue for pp/api/video/route.ts (mapToWavespeedInput).
+- Playwright was installed and run against /video, but local UI verification is blocked by Clerk without a valid local publishable key; the page returns Clerk host_invalid before rendering.
+- Discovered pricing blocker: Seedance 2.5 UI estimate can use pricingConfig/computeCreditsFromDynamicModel, while server charging uses getVideoCreditsByRoute; the dynamic sticker table and credit formula do not match the server/customer-credit pricing. No pricing change was made because approval is required.
+- Files touched in release worktree during this verification: lib/dynamic-model-loader.ts only. No push or deploy was performed.
+
+## 2026-10-12 00:00 +03:00 — Seedance 2.5 pricing consistency fix
+- Work completed in release worktree `..\seedance-25-complete-release` on branch `deploy/seedance-25-complete`; no push or deploy was performed.
+- Root cause: the `/video` UI estimate for Seedance 2.5 could read `pricingConfig` / `computeCreditsFromDynamicModel`, while the server charged with `getVideoCreditsByRouteAsync`; the two paths used separate formulas/tables and the UI did not include Seedance reference-video durations in the same canonical charge path.
+- Implemented fix: Seedance 2.5 and Seedance 2.5 Turbo now use `lib/credit-pricing.ts` as the single Customer Credits source for display, preflight guard, and server charge. Turbo rejects unsupported 480p/4k instead of pricing them. Reference video durations are counted for Seedance 2.5 text/reference routes only, capped at 30s, and are passed through the submit payload for billing parity.
+- Provider-cost audit path in `lib/provider-tariff-registry.ts` now includes Seedance 2.5 reference video duration when the text/reference route applies, preserving current discounted provider rates and the existing formula `provider cost × 1.4 × 40`.
+- Files affected in the release worktree: `app/(dash)/(routes)/video/page.tsx`, `lib/credit-pricing.ts`, `lib/dynamic-model-loader.ts`, `lib/provider-tariff-registry.ts`, `test/pricing-core.test.ts`.
+- Verification: new focused Seedance pricing parity tests passed 4/4; existing Seedance/provider routing tests passed 18/18; `npm run build` passed with existing dynamic-server/Browserslist/Tailwind warnings. Full `npx tsc --noEmit` still fails on pre-existing/out-of-scope errors in `.next/types` route exports, drama-studio, explore, face-swap/upscale/image inline charge fields; no new Seedance pricing TypeScript error was observed.
+- Remaining risk: current Seedance 2.5 rates remain based on the discounted provider costs already in code/source evidence. If the WaveSpeed discount is temporary or not guaranteed, changing to list price is a business pricing decision requiring owner approval.
+
+## 2026-10-12 00:41 +03:00 — Seedance 2.5 release finalized locally
+- Finalized local commit `80834cdb836af3f4165af138c9444927b2c36372` on `deploy/seedance-25-complete`; no push or deploy was performed.
+- Automated TypeScript comparison against production base `e86b5bdb21880cb0306179ca293e870b32206e44` used an extracted base archive plus generated `.next/types`. Result: no new TypeScript error signatures; current release has one fewer error because `DynamicVideoModel.provider` is now typed.
+- Focused verification passed: Seedance 2.5 pricing filter 5/5, Seedance/provider/media-reference suite 43/43, production build passed. A broad `pricing-core.test.ts` run still fails on old non-Seedance expectations for Google/Wan/Seedance 2.0/Gemini; not changed for this release.
+- Playwright browser verification is BLOCKED locally because no valid Clerk development publishable key is present; `.env.example` is not a usable credential and production Clerk credentials were not changed.
+- Release scope remains Seedance/video/pricing only. No pricing margin, subscription, credit balance, B2, Contabo, database, push, or deploy changes.
+
+## 2026-10-12 — Seedance 2.5 deploy attempt
+- Release branch `deploy/seedance-25-complete` at commit `80834cdb836af3f4165af138c9444927b2c36372` was verified locally and pushed to GitHub successfully.
+- Local pre-deploy checks confirmed the release descends from production base `e86b5bdb21880cb0306179ca293e870b32206e44` and includes only Seedance/video/pricing/test files.
+- Contabo deployment could not be executed from this agent because non-interactive SSH to `root@saadstudio.app` failed with `Permission denied (publickey,password)`, and no app terminal session was attached. No production files or services were changed, so rollback was not needed.
+- Next step: run the safe deployment commands from an authenticated server shell, verifying current commit first, building before app restart, and restarting only the app service after successful build.
+
+## 2026-10-12 — Seedance 2.5 stale quality-options hotfix
+- Fixed a production-facing Seedance 2.5 UI defect where an old dynamic model row could keep the Turbo card label as `Seedance 2.5`, causing the visible card to show only Turbo qualities `720p/1080p` while appearing to be the standard model.
+- `lib/dynamic-model-loader.ts` now treats the canonical Seedance 2.5 and Seedance 2.5 Turbo card names as code-owned, so stale DB labels cannot collapse the standard card or hide `480p/4k`.
+- Added regression coverage in `test/seedance-reference-video-routing.test.ts` for the stale-label case.
+- Verification: Seedance-focused tests passed 14/14; reference/media/provider focused suite passed 44/44; `npm run build` passed with existing dynamic-server/Browserslist/Tailwind warnings.
+- Commit pushed to `deploy/seedance-25-complete`: `f4f7422` (`fix seedance 2.5 stale quality options`). No production SSH deploy was performed by this agent.
+# Current task — Audio Suite voice preview 401 / generation 402 (2026-10-25)
+- Root cause confirmed: `middleware.ts` applied Clerk auth to `/api/voice-sample` before the route could serve its public, free preview, causing the browser's 401 and subsequent `NotSupportedError` when it tried to play the error response.
+- Fix applied: allowlisted `/api/voice-sample(.*)` in the middleware. Paid `/api/generate/audio` remains authenticated and its 402 is intentional when the account lacks credits; the static Sound Studio page already surfaces the server's error message.
+- Test added: `test/voice-samples-not-dead.test.ts` asserts the preview route remains explicitly allowlisted.
+- Verification: focused Vitest run was blocked by the sandbox Windows `EPERM` rename failure in Vitest's temporary client cache before tests executed. No provider call, billing change, or deployment was performed.
+- Remaining: deploy/restart the app, then verify `/audio` preview returns `200 audio/mpeg`; test a funded account separately for paid generation.
+
+# Current task — Hyper3D Rodin 2 3D credit configuration (2026-10-26)
+- Root cause: `/api/3d` resolves charges through `lib/pricing.ts`, while Hyper3D Rodin 2 existed only in the newer `lib/credit-pricing.ts` table. The legacy resolver therefore returned `0` and rejected `hyper3d-rodin-2.image` with `No credit configuration` despite the UI showing 40 credits.
+- Fix: added explicit flat billing for `hyper3d-rodin-2.text` and `.image` at 40 credits per unit in `resolveSpecialUserCharge`, plus legacy alias entries.
+- Verification: focused Vitest invocation started but did not complete within the Windows sandbox execution window; no paid generation was executed. The pasted Clerk session text was treated as sensitive and not recorded.
+- Remaining: run the focused pricing test in CI/server, then deploy the pricing fix. The Clerk timeout remains a separate connectivity/session issue and was not changed.
+
+# WaveSpeedAI research snapshot (2026-11-03)
+
+- تمت مراجعة المصادر الرسمية الحالية لـWaveSpeed: REST API، قائمة النماذج، المدونة، صفحة Studios، وMCP.
+- أبرز الإضافات المؤكدة: Kling 4.0 بخمسة مسارات (text/image/reference/edit/extend)، GPT Image 2.5 بطبقتي Flare وSunburst، وطبقة MCP للبحث في الكتالوج وقراءة schema والأسعار والتنفيذ.
+- Seedream 5.5 غير مطروح رسميًا حتى تاريخ الفحص؛ مقال WaveSpeed عنه تنبؤ/تحضير فقط، لذلك لا يُضاف.
+- فحص الكود أظهر أن GPT Image 2.5 وSeedream 5.0 وMeshy 6 وTripo3D 2.5 وHunyuan3D 3 موجودة جزئيًا أو في سجلات داخلية. لم يثبت بعد أن كل مساراتها ظاهرة ومفعّلة في واجهات المستخدم.
+- Kling 4.0 لم يظهر في `lib/video-model-registry.ts` أثناء البحث النصي، ويحتاج تدقيقًا منفصلًا قبل الإضافة.
+- قرار: التقرير القادم يفرّق بين الإضافة الفعلية، التفعيل/إظهار الموجود، والميزات التي لا ينبغي إضافتها حاليًا. لا تغييرات تنفيذية أو توليد مدفوع تمت في هذه المهمة.
+- الخطوة المتبقية: مطابقة schemas والأسعار الحية لكل endpoint مرشح، ثم إعداد patch صغير بعد موافقة المالك على الأولويات.
+
+# WaveSpeed integration implementation (2026-11-03)
+
+- أضيف عقد Kling 4.0 إلى `lib/video-model-registry.ts` بمسارات text/image/reference/extend الموثقة، ومدى 3-30 ثانية، 720p/1080p، النسب الأربع، وحدود 10 صور/5 فيديو/3 صوت.
+- أضيف `resolutions: ["1k", "2k", "4k"]` وخيارات الجودة الخمس والنسب الرسمية إلى بطاقات GPT Image 2.5 الأربع في `lib/image-models.ts`.
+- أضيفت تغطية route allowlist لمسارات Kling 4.0 في `app/api/video/route.ts`.
+- اختبار العقد الجديد `test/wavespeed-new-models-contract.test.ts` مرّ: 2/2 بعد دورة RED/GREEN. تشغيل Vitest احتاج صلاحية خارج العزل بسبب EPERM في cache Windows.
+- MCP لم يُربط بعد بمسار إنتاجي؛ القرار الآمن هو استخدامه خادميًا لمزامنة catalog/schema/pricing مع مراجعة بشرية، وعدم كشف مفتاح WaveSpeed للمتصفح.
+- الحاجز المتبقي قبل إعلان النقاط الخمس مكتملة: Video Edit وMotion Transfer/Object Swap تحتاج مسارات إدخال وواجهات فعلية واختبارات provider payload، وليست مجرد registry rows. لا يجوز إعلانها مضافة حتى يكتمل ذلك.
+- التحقق الشامل: اختبار العقد الجديد 2/2 ناجح. `npx tsc --noEmit` فشل بـ13 خطأ معروفًا/مسبقًا، منها خطأ `DynamicVideoModel.provider` في `app/api/video/route.ts`، ولم يظهر خطأ متعلق بعقد Kling 4 أو GPT Image 2.5. مجموعة Vitest الكاملة فشلت في 5 اختبارات موجودة مسبقًا: هوامش/تسعير، Hailuo، لوحة agent، checkpoint pricing، وfinal integration؛ كما تعذر اتصال قاعدة البيانات `198.51.100.1:5432`.
+- تم ربط صفحة `/video-edit` بمسار Kling 4.0 الرسمي `kwaivgi/kling-v4.0/video-edit`، وإضافة `edit_api_route` إلى العقد وخريطة البحث الخادمية. اختبار العقد بعد الربط 2/2 ناجح.
+- أضيفت صفحة `/video-tools` كمساحة مستقلة لأدوات Video Edit وVideo Extend وMotion Transfer وObject Swap وWaveSpeed MCP، مع روابط فعلية للأدوات الجاهزة وحالة صريحة للأدوات التي لا يملك المشروع لها endpoint موثقًا بعد. تم الحفاظ على أسلوب صفحة `/video` الداكن والكثيف؛ أداة 21st CLI غير متاحة في البيئة، لذلك لم يتم تشغيل `21st review`.
+- تم تثبيت عقود WaveSpeed الرسمية لأداتي Motion Transfer وObject Swap في `lib/video-tools-registry.ts`، وإضافة allowlist للمسارين في `/api/video`. Motion: Kling v2.6 std، صورة + فيديو + orientation، 3-30 ثانية. Object Swap: OpenJutsu، target + video، modes change/background، 480p/540p/768p/1080p، فوترة 3-15 ثانية. اختبارات الأدوات والموديلات مرّت 4/4.
+- تدقيق 2026-11-03: أضيفت مواصفة Video Upscaler القياسي وUltimate مع الدقات والتعرفة الرسمية، وأصبحت صفحة الأدوات تستطلع task status وتعرض الناتج أو الفشل.
+- تحقق العقد الحالي 7/7 خارج عزل Windows. TypeScript ما زال يفشل في 13 خطأً سابقًا خارج نطاق WaveSpeed؛ لم ينفذ توليد مدفوع أو نشر.
+- MCP الحالي مزامنة server-side للكتالوج REST مع مقترحات وسجل وموافقة؛ لا يُدّعى تفعيل JSON-RPC أو schema ديناميكي حتى تثبت بروتوكولية endpoint وتُربط الموافقة بالتفعيل الآمن.
+- تدقيق لاحق: أضيف عميل MCP JSON-RPC حقيقي عبر Streamable HTTP لمساري `initialize` و`tools/list` مع parsing JSON/SSE ومسار admin `mcp_discover`; اختبارات Mock بروتوكولية ناجحة، ولم يُنفّذ `run_model`.
+- GPT Image 2.5 كان يمر سابقاً إلى OpenAI المباشر؛ صُحح إلى مسارات WaveSpeed الأربعة الرسمية، مع quality/resolution منفصلين وتسعير WaveSpeed الرسمي لكل quality/resolution، والتحرير حتى 16 مرجعاً.
+- `npx tsc --noEmit` أصبح ناجحاً بعد إصلاح أخطاء route exports وInlineProviderResult وDynamicVideoModel.provider وpredicate.
+- اختبارات WaveSpeed المركزة: 17/17 ناجحة. مجموعة Vitest الكاملة ما زالت تفشل في اختبارات غير مرتبطة بسبب قاعدة بيانات 198.51.100.1 غير متاحة، توقع Kling v3 Turbo قديم، وتوقع Seedance margin قديم؛ لم تُعدّل هذه خارج نطاق المهمة.
+### WaveSpeed final audit — 2026-11-03
+- Added `docs/WAVESPEED_FINAL_AUDIT.md` with local/mock/live evidence and remaining production gates.
+- GPT Image 2.5 server charging now uses the official quality/resolution table, edit reference surcharge, and UI-selected PNG/JPEG/WebP output format.
+- Verification: `npx tsc --noEmit` passed with zero errors; focused WaveSpeed contracts passed 17/17.
+- Live MCP endpoint was reached safely without generation, but `WAVESPEED_API_KEY` is unset and both `initialize` and `tools/list` returned 401; authenticated discovery remains blocked.
+- Playwright navigation was attempted without generation; local `/image` returned 500 due development proxy socket hang-up.
+- Full Vitest remains non-clean only in DB-dependent suites and two unrelated legacy pricing expectations; no tests were weakened or deleted.
+### WaveSpeed closure verification — 2026-11-03
+- Re-read the four mandatory project memory files and verified the requested installed skills under `C:\Users\PC\.agents\skills`; 13 relevant skills were present and read, including TypeScript, Next.js, API contracts/connectors, MCP, Playwright/E2E, security, debugging and code review.
+- Fresh Next dev server could start only with escalated local binding, but the browser/test network intercepted localhost:3002 and returned Firecrawl 404; prior localhost:3001 attempt returned proxy socket hang-up. No UI success was claimed.
+- `npm run test:db:status` proved Docker Desktop unavailable. The repository's isolated test DB guard was not bypassed and production DB was not touched.
+- Final `npx tsc --noEmit` passed. Full Vitest was executed but remained non-clean and was bounded/interrupted after repeated unrelated DB/legacy pricing/catalog failures; focused WaveSpeed suite passed 17/17.
+- `docs/WAVESPEED_FINAL_AUDIT.md` now contains the mandated stage/skill/test/result table and updated blockers.
+### Test environment isolation closure — 2026-11-03
+- Confirmed Docker Desktop healthy outside sandbox. Firecrawl API is the container `firecrawl-api-1` on host port 3002; it was not reused for Next.js.
+- Started Next separately on 127.0.0.1:3010. Playwright attempted `/image` and `/video` without generation, but its proxy logged socket hang-up while proxying localhost:3010; this remains an external browser-tool boundary and is not claimed as a UI pass.
+- Started isolated `saad-studio-test-db` on localhost:5433 and pushed Prisma schema through the repository guard. `npm run test:integration` passed 7 files / 50 tests.
+- Final `npx tsc --noEmit` passed; focused WaveSpeed tests passed 4 files / 17 tests.
+- fsmonitor is configured and reports watching the worktree, but its IPC file is intermittently absent. Used only `git -c core.fsmonitor=false` for diagnostics; did not disable protection or delete data.
+### Playwright local Chromium closure attempt — 2026-11-03
+- Re-read/used systematic-debugging, playwright, playwright-testing, e2e-testing, nextjs-expert and code-review skills.
+- Confirmed Firecrawl owns only port 3002; proxy env variables were all unset and no project Playwright/baseURL config exists. Playwright packages are absent from node_modules; temporary `npx playwright` CLI resolved v1.64.1 without changing dependencies. Chrome executable exists locally.
+- Next was started on 127.0.0.1:3010. Direct PowerShell/curl and Node fetch to `/image` timed out with zero bytes; MCP browser requests to `/image` and `/video` returned proxy socket hang-up. No screenshots or UI pass claimed because Next HTML was not received by the independent check.
+- Final TypeScript passed and focused WaveSpeed tests passed 17/17. No app/proxy/system settings were changed.
+### Next 3010 root cause — 2026-11-03
+- Clean Next start failed before readiness with `EADDRINUSE` on 127.0.0.1:3010.
+- Socket inspection identified PID 3392. After exact-process cleanup, the same PID immediately reclaimed 3010 and Next failed again. This proves an external Codex/browser proxy auto-respawn, not an SSR/Middleware deadlock.
+- No Next, Middleware, Clerk, WaveSpeed, Windows proxy or system setting was changed. The issue remains an environment blocker requiring the external process to release 3010 or a supported isolated browser route.
+### Alternate-port Next/Chromium verification — 2026-11-03
+- PID 3392 read-only identity: node Next start-server, parent 25388 running `next dev --hostname 127.0.0.1 --port 3010`; not terminated.
+- Auto-selected free port 57802. Fresh Next printed Ready and owned the listener PID 56032.
+- `/` returned 307 in 48ms. `/image` and `/video` returned 500 after ~30s with same-URL middleware rewrite and Internal Server Error body.
+- Chromium CLI ran with normal and per-run direct proxy options; both screenshots show only Internal Server Error. The Next session logs socket-hang-up proxy errors on 57802 too, proving the browser/Codex transparent proxy intercept is not limited to 3010.
+- No application/system settings changed; fresh test server stopped, PID 3392 left untouched.
+### HTTP 500 investigation — 2026-11-03
+- Fresh Next reached Ready; `/` returned 307 immediately, while `/image` and `/video` returned 500 after ~30s.
+- Direct `/api/maintenance?slug=image` also hung for 15s. `app/api/maintenance/route.ts` performs `prismadb.pageLayout.findUnique()` without a query timeout; the environment's intentionally unreachable remote test URL is `198.51.100.1:5432`.
+- Next's concrete logged error is `router-utils/proxy-request.js` socket hang-up after the request waits; no route-specific Server Component stack trace appeared. `app/layout.tsx` and dashboard route pages are client components with no server DB await.
+- `next.config.mjs` has no rewrites/proxy for these routes. No code change was made because the maintenance-branch entry condition is not proven for every request; avoid speculative middleware changes.
+### Local DB maintenance verification — 2026-11-03
+- `.env` and `.env.local` contain DB variables; parent process variables are unset. Dev-only process overrides pointed both Prisma URLs to 127.0.0.1:5433 without editing files.
+- Prisma read-only query succeeded; `pageLayout` exists but has 0 rows, with no cms-image/cms-video records.
+- Fresh Next with local DB reached Ready; `/` and favicon worked, but `/api/maintenance?slug=image`, `/image`, `/video`, `/api/health`, `/explore`, and `/pricing` still timed out. Dynamic requests broadly hang while static assets work.
+- This disproves the remote DB URL as the sole cause. No application change was made; exact blocker remains in the Clerk/Next middleware request path and no stack trace was emitted.
+### Video tools verification follow-up — 2026-11-04
+
+- Focused video/WaveSpeed contracts pass: 5 files, 19 tests, with process-local `TEMP`/`TMP` set to `artifacts/vitest-tmp`; no paid provider calls.
+- Latest TypeScript check passes. Full Vitest is not a pass: DB-dependent tests cannot reach the intentionally unreachable safety URL because Docker Desktop is unavailable, and eight legacy pricing expectations mismatch current pricing.
+- Build remains blocked by `EPERM` creating `.next/server/app/api/cinema/shot/[id]` under the Codex Windows filesystem boundary. No system permissions, production DB, Lara, Firecrawl, or WaveSpeed integrations were changed.
+- Remaining action: run build and isolated DB/UI checks from ordinary PowerShell with Docker available; classify any new failures before fixing.
+
+### Video tools final verification — 2026-11-04
+
+- Owner-reported ordinary PowerShell build completed successfully with the Next.js page table and no visible errors; Codex did not independently reproduce the external build.
+- Updated only stale pricing expectations in `test/pricing-core.test.ts` after matching current tariff logic; no production prices changed.
+- Focused rerun passes 6 files / 50 tests; TypeScript passes. Docker remains blocked by permission denied on the Docker Desktop named pipe, so isolated DB integration is unverified.
+- Full Vitest is not a pass because the bounded run did not reach a clean summary and DB-dependent failures remain. No paid generation, production DB, Lara, Firecrawl, or design changes.
+
+### Video tools DB and credits closure attempt — 2026-11-04
+
+- Docker named pipes are visible but Docker server access is denied in Codex; no permissions/settings changed. Isolated DB integration on `127.0.0.1:5433/saad_studio_test` is blocked because nothing is listening.
+- Corrected one additional stale Veo expectation in `test/provider-cost-capture-and-reconciliation.test.ts` (`53.76` current charge); production pricing code unchanged.
+- Focused pricing/video/WaveSpeed suite remains 50/50 PASS. Full combined rerun lacks a clean final summary; no full-suite PASS claim. Production DB, Lara, Firecrawl, and paid generation untouched.
+### External isolated DB verification — 2026-11-04
+
+- From the repository root in ordinary PowerShell, the isolated DB was healthy with 57 tables, Prisma schema was in sync, and `npm run test:integration` passed 7 files / 50 tests.
+- The disposable test container/network were stopped with `npm run test:db:down`; production was untouched. This closes the earlier Codex-only Docker permission blocker for the isolated integration evidence.
+### Deployment production readiness check — 2026-11-04
+
+- Verified GitHub remote `seedsat1/saad-studio` and `origin/main`; current checkout is `migration/contabo`. No workflow dispatch performed.
+- DNS A records for `saadstudio.app` and `www` resolve to `161.97.77.229`; no records changed. TCP 80 responded; 22/443 and VPS software/resources remain unverified.
+- No Contabo/GitHub deployment secrets were available locally. No SSH connection, server change, first deployment, or service interruption occurred.
+- Deployment system remains locally prepared; production is blocked pending GitHub production environment/secrets and read-only VPS checks.
+### SaadStudio Deploy Manager — 2026-11-04
+
+- Added a local Electron deploy manager under `deploy-manager/`; it calls the existing GitHub Actions workflow, stores GitHub/SSH secrets with Windows Credential Manager, validates an exact SSH fingerprint, and exposes deploy/rollback/status/settings controls.
+- JavaScript syntax and dependency-load checks passed. Desktop shortcut was created on the user's Windows Desktop. No dispatch, SSH login, production action, Lara, or Firecrawl change occurred.
+- First-run user action remains: enter GitHub token, dedicated SSH key, SSH user, and verified `SHA256:` host fingerprint. Production deployment remains explicitly unexecuted.
+### Deploy Manager shortcut repair — 2026-11-04
+
+- Root cause: the original `.lnk` passed the Arabic project path through a PowerShell shortcut argument and Windows stored it as a corrupted `????` path. Direct Electron launch from the original folder stayed open with no stderr error.
+- Fixed the shortcut using the ASCII helper junction `C:\Users\PC\SaadStudioDeployManager` and a stable launcher. Two clean shortcut launches kept the `SaadStudio Deploy Manager` window open; Credential Manager temporary round-trip passed and was cleaned up.
+- No deploy/rollback, SSH login, production change, Lara action, or Firecrawl action occurred.
+### Deploy Manager automatic setup controls — 2026-11-04
+
+- Added in-app GitHub OAuth Device Flow, Ed25519 key generation with private-key storage in Windows Credential Manager, and visible setup messages. OAuth requires a real registered Client ID; none was invented.
+- Contabo user creation/key installation remains pending until explicit user approval and verified SSH access. No deployment, production DB, Lara, or Firecrawl action occurred.
+### Deploy Manager OAuth/state repair — 2026-11-04
+
+- Fixed startup history loading before GitHub authentication, raw IPC error presentation, and static connection status. Added explicit disconnected/pending/verifying/connected/expired/denied/API/network states; Deploy/Rollback stay disabled until verified repository permissions.
+- OAuth mock contract passes pending, slow_down, expired_token, access_denied, success, and offline cases. Real GitHub OAuth remains unrun pending a registered Client ID and user approval.
+### Contabo setup wizard controls — 2026-11-04
+
+- Added fingerprint extraction and explicit confirmation UI plus fixed provisioning of `saaddeploy` and deployment directories using the existing Ed25519 public key. Bootstrap password is transient only.
+- Real SSH provisioning was not run: no credentials/fingerprint approval supplied. Syntax, OAuth mock, and app launch checks pass; deployment and production remain untouched.
+### Deploy Manager persistence/readiness — 2026-11-04
+
+- Added startup readiness checks for GitHub, public health, and saved SSH metadata; deploy controls remain disabled until readiness is true.
+- GitHub/SSH secrets remain in Credential Manager, root/bootstrap passwords are not stored. Real restoration and SSH/GitHub checks are still pending user setup; no deployment occurred.
+### Real connection recovery check — 2026-11-04
+
+- Credential Manager contains GitHub and Ed25519 entries without exposing values, but saved Contabo user/fingerprint are empty.
+- GitHub `/user`, repository, workflow, and production Environment checks passed read-only. Repository Secrets endpoint has no secret names.
+- `https://saadstudio.app/api/health?full=1` returned 200 healthy with DB true; TCP/22 is reachable. SSH auth was not attempted due missing user/fingerprint. Deploy readiness remains blocked; no Workflow/production action occurred.
+### Setup wizard next-step repair — 2026-11-04
+
+- Confirmed the next-button defect: saving reloaded settings and unconditionally switched back to the dashboard before the wizard transition was visible.
+- Preserved the wizard view during wizard saves, persisted/restored bounded `wizardStep`, used wizard field values, and retained existing values on partial saves.
+- Added safe GitHub authorization-page opening and device-code copying with LTR code rendering. Syntax and OAuth mock checks passed; Electron/Playwright five-step UI acceptance remains blocked because no Electron test binary/runner was available here. No deploy, rollback, SSH, or production action occurred.
+### SSH fingerprint extraction repair — 2026-11-04
+
+- Step 3 read only the general `bootstrapPassword`/`user` IDs, not `wizPassword`/`wizUser`, so it returned before IPC and SSH. It now uses wizard fields, reports connection state/errors, requests SHA256 host hashing, resets independent verification unchecked, and blocks navigation without a valid fingerprint plus explicit confirmation.
+- The real Electron button was exposed and invoked; no credentials were supplied. The live TCP probe to `161.97.77.229:22` failed in this environment, so live SSH fingerprint acquisition is BLOCKED, not PASS. No server or key changes occurred.
+### SSH fingerprint format hardening — 2026-11-04
+
+- A 64-character hex digest was being displayed unchanged. The formatter now converts it to OpenSSH `SHA256:<Base64>`; host verification uses the SSH server public host key from `ssh2`, never the deployment user's private key.
+- Added copy-fingerprint UI and explicit unchecked confirmation initialization. Syntax/OAuth mock checks passed; live fingerprint acquisition is blocked by missing bootstrap credentials and failed TCP/22 reachability. No server, key, Deploy, or Rollback action occurred.
+### Deploy Manager full audit — 2026-11-04
+
+- Added `DEPLOY_MANAGER_FULL_AUDIT.md` with function-by-function evidence and PASS/BLOCKED classification.
+- Fixed OAuth helper request parameters, SSH key reuse/public-key derivation on repeat setup, and SSH test selection of `saaddeploy` with normalized host fingerprint comparison.
+- Local syntax, OAuth contract, and renderer/HTML ID scans pass. Real Contabo SSH, provisioning, GitHub Secrets configuration, and Electron Playwright automation remain blocked or intentionally unrun; no Deploy/Rollback occurred.
+### Readiness recheck repair — 2026-11-04
+
+- The button event existed, but readiness only reported configuration presence and three terse checks; it did not validate Workflow, required Secrets, or live SSH.
+- Added fresh Workflow/Secrets/SSH/health checks with timestamped per-check messages, loading/disabled state, and repeat-click protection. Local syntax/OAuth tests pass. Fresh Electron proof of updated results is blocked because the currently running window had older loaded code and CUA geometry was unavailable. No Deploy/Rollback occurred.
+### Readiness error visibility repair — 2026-11-04
+
+- The screenshot confirmed the default “not run” state remained after a failed IPC path. Renderer catch handling now marks all readiness checks failed and shows the actual error with timestamp; Credential Manager access errors from GitHub status are returned as explicit connection state.
+- Syntax/OAuth tests pass. Live Electron click/result proof remains BLOCKED by the existing windows/geometry limitation; no false PASS, Deploy, or Rollback was claimed.
+### SSH public-key restoration — 2026-11-04
+
+- Root cause: startup exposed only SSH-key presence and never derived the public key for either UI field.
+- Added validated Credential Manager read, Ed25519 public-key derivation, a shared settings response for both views, and a restore button. Private key values are never returned or logged.
+- Direct keytar validation returned Access is denied in this environment; restart persistence and live public-key display remain BLOCKED pending an Electron-context Credential Manager test. No new key or server change occurred.
+### Readiness SSH key-format repair — 2026-11-04
+
+- Root cause proven by the real Electron screenshot: readiness reached the backend but `ssh2` rejected the stored PKCS#8 `-----BEGIN PRIVATE KEY-----` as `Unsupported key format`.
+- Added `deploy-manager/ssh-key-format.cjs` to convert the existing Ed25519 PKCS#8 key to OpenSSH `openssh-key-v1` in memory only; Credential Manager contents and server keys are unchanged.
+- Readiness and SSH test now pass the converted key to `ssh2`; renderer removes only the Electron IPC wrapper from displayed errors while preserving the actual cause.
+- Local round-trip test with `ssh2.utils.parseKey` passed (`ssh-ed25519`). Live Contabo readiness after this fix still requires an Electron-context run and is not claimed PASS here.
+### GitHub SSH secret transfer — 2026-11-04
+
+- Added an explicit, confirmation-gated UI action to upload the existing SSH private key as `CONTABO_SSH_KEY` in the GitHub `production` Environment.
+- The main process reads Credential Manager, converts PKCS#8 to OpenSSH in memory, encrypts with GitHub's environment public key using `tweetnacl` sealed-box format, sends only the ciphertext, and verifies the secret name; the private key is never returned to renderer, displayed, logged, or written to disk.
+- Readiness and secret-status checks now query environment secrets rather than repository-level secrets. No upload or Workflow execution was performed in this turn.
+- Follow-up: corrected encryption to GitHub/libsodium sealed-box construction (BLAKE2b-derived nonce plus `nacl.box.after`) and added HTTP status/API-message propagation for public-key, PUT, and verification responses. Secret values remain excluded from errors.
+- Screenshot evidence showed the GitHub Environment is named `Production`; all environment-secret API calls now use that exact name instead of lowercase `production`.
+- Real Electron result then exposed `Digest method not supported`: the host Electron/OpenSSL lacks Node's BLAKE2b digest. Added a dependency-free BLAKE2b fallback and verified its empty-input digest against Node crypto; no GitHub request had been reached before this fix.
+- GitHub then returned HTTP 422 `validation failed due to an improperly encrypted secret`. Replaced the custom runtime BLAKE2b path with the pure-JS `blakejs` implementation, verified against Node Crypto, while retaining the sealed-box layout. No further upload was attempted.
+
+### Server diagnostics page — 2026-11-04
+- Added fixed, read-only SSH audit checks, progressive IPC events, cancellation, per-check timeouts, fingerprint verification, output scrubbing, and the `التشخيص الشامل للسيرفر` view.
+- Local syntax/diff checks passed and the updated source Electron window exposed the new navigation item. Live SSH execution is BLOCKED because CUA reported `coordinate input geometry is unavailable`; no server command or mutation was executed.
+- Production readiness remains UNVERIFIED until the live audit is run from a normal Windows desktop session.
+
+### SSH audit fingerprint fix — 2026-11-04
+- Root cause of the audit error `Host denied (verification failed)`: `ssh2` supplies a 64-character hexadecimal SHA-256 digest when `hostHash: "sha256"` is configured, while the saved fingerprint is OpenSSH `SHA256:<base64>`.
+- Fixed `deploy-manager/server-audit.cjs` to convert the hex digest to base64 before strict comparison. Unknown or mismatched fingerprints remain rejected.
+- Live SSH retest is still pending; no server connection or mutation was performed by this fix.
+
+### Server repair wizard — 2026-11-04
+- Added `deploy-manager/server-repair.cjs` with a fixed allowlist: HTTPS process discovery (read-only), Docker group preparation, production deploy-script installation, and backup-directory preparation.
+- Added Electron IPC `server:repair:plan` and `server:repair:apply`; write steps require an explicit renderer confirmation and use the existing verified SSH key/fingerprint. No Deploy/Rollback command is exposed by these steps.
+- Added `إصلاح وتجهيز السيرفر` navigation/view with per-step command, impact, approval button, result evidence, and error display.
+- Syntax checks passed. The newly launched source window was opened, but its AX tree still showed the prior audit view due the existing Electron single-instance window; no repair step was executed against the server.
+
+### Deploy Manager launch identity — 2026-11-04
+- Updated `deploy-manager/package.json` to version `2.1.0-repair-wizard` and exposed the version/build date in the sidebar footer (`2026-11-04`).
+- Audited the desktop shortcut: it pointed to the old packaged `C:\Users\PC\SaadStudioDeployManager\launch.ps1`. Repointed it to a PowerShell command that locates the project containing the new `deploy-manager\Start.ps1` and launches that source version, avoiding Unicode path corruption.
+- No Electron process was force-closed because Windows process inspection/activation was blocked; no server operation was performed.
+
+### Repair button SSH-plan behavior — 2026-11-04
+- `بدء الإصلاح` now performs a real read-only SSH probe for HTTPS/process discovery before rendering the plan; it no longer only loads static data.
+- The UI immediately shows running state, records timestamp/duration activity, renders probe evidence/errors, and keeps all write-step approvals separate. No write command is triggered by the button.
+- Syntax checks passed. Live button interaction remains unverified in this environment because the active Electron window could not be replaced/activated without unsafe process targeting.
+
+### Repair safety and HTTPS detection update — 2026-11-04
+- Caddy/HTTPS audit now checks the actual `caddy run` process and real HTTPS headers/health response; it no longer treats `systemctl is-active caddy` as the only source of truth.
+- Removed the Docker-group write action from the repair plan. The plan now provides a read-only Docker scope analysis, avoiding root-equivalent group access.
+- Deploy-script installation now verifies the embedded source SHA-256 remotely before `sudo install`; backup step is read-only readiness inspection rather than empty-directory creation.
+- No administrative step was executed.
+
+### Audit evidence semantics — 2026-11-05
+- Audit rows now expose scrubbed `stdout`, `stderr`, and `exitCode` separately. Caddy is evaluated by real `caddy run` evidence plus HTTPS/Health response, not systemd status alone.
+- Docker commands fail explicitly on permission errors; database evidence becomes `UNVERIFIED` when health output lacks database status; missing backup paths become `WARNING`.
+- Deploy-script approval is disabled until local source existence, SHA-256, and `bash -n` preflight pass. No Deploy/Rollback or server mutation was executed.
+
+### Reviewed WaveSpeed/site commit — 2026-11-05
+- Committed and pushed only reviewed Image/Video/WaveSpeed/MCP site files to `migration/contabo` as `8f8454a`.
+- Focused contract suite passed: 5 files, 19 tests, using a repository-local TEMP directory; no paid provider call was made.
+- TypeScript exceeded the bounded 10-second diagnostic run without output; it is not marked PASS.
+- Production build failed with `EPERM` creating `.next/server/app/.well-known`, consistent with the Codex filesystem boundary; no application fix was guessed.
+- Remaining local modifications and artifacts were intentionally left uncommitted and untouched.
+
+### External verification — 2026-11-05
+- TypeScript completed outside the Codex filesystem boundary: exit 0 in 82.6s.
+- Production build completed outside the boundary: exit 0 in 107.4s; warnings were non-fatal (Browserslist, autoprefixer, ambiguous Tailwind class, expected dynamic-route messages).
+- Commit `8f8454a` matches the reviewed WaveSpeed/image/video scope. `deploy.yml` invokes `/opt/saadstudio/bin/deploy-release` with `action` and `release_ref`, but production execution remains pending approval and server readiness.
+- No Docker permission change, backup creation, deploy, or rollback was executed.
+
+### Manual release preparation comparison — 2026-11-05
+- Compared `8f8454a` with latest pushed `e86cbb0`: `e86cbb0` adds deployment/workflow and Deploy Manager changes (`.github/workflows/deploy.yml`, `deploy/*`, `deploy-manager/*`, `.eslintrc.json`, and an audit document); no `app/`, `components/`, or `lib/` site-runtime files changed in that delta. `.eslintrc.json` is lint configuration only.
+- Verified the isolated remote release `/opt/saadstudio/releases/8f8454a53c77953534205b467c340f66ea44f104-verified` against the exact commit using six independent SHA-256 file comparisons plus the commit marker. All six matched the local `git show` content.
+- Verified backup `/opt/saadstudio/releases/.backups/20261105T000706Z`: `sha256sum -c` passed and `tar -tzf` passed. No restore was executed.
+- Read-only SSH evidence: `current` resolves to `/opt/saadstudio/current`; Caddy and Docker are running as root, Next is running as `saaddeploy`, and `saaddeploy` is not in the Docker group; `docker ps` is blocked by Docker socket permission denied. No switch, restart, Docker change, Caddy change, or database change was executed.
+- Release preparation is complete; production switch remains pending explicit final approval and a service-specific command review. Docker-dependent deployment remains blocked for `saaddeploy` until a least-privilege mechanism is approved.
+
+### Runtime ownership inspection — 2026-11-05
+- Read-only process inspection showed the live Next process has cwd `/app`, while root-owned `docker-proxy` processes map container port 3000 and Caddy maps 80/443. This proves the live app is Docker-backed, not a direct host Next process, systemd unit, or PM2-managed app. `/opt/saadstudio/current` is absent/dangling; it is not the live working directory.
+- `saaddeploy` cannot run `docker ps` because `/var/run/docker.sock` denies access. Therefore a direct release copy cannot safely update the live app without the existing privileged/container orchestration path.
+- The inspection invoked `pm2 list`, which spawned an empty PM2 daemon under `saaddeploy` as a read-side effect; no app process was started or stopped and no deployment action was taken. Future checks must not invoke PM2 commands.
+
+### Root Docker inspection — 2026-11-05
+- Attempted the requested read-only root inspection through SSH using `sudo -n`; the server returned `sudo: a password is required`, so root Docker metadata and the Compose file could not be read. No privileged command ran and no server state changed.
+- The final deployment command is therefore blocked until a permitted read-only root path or the exact Compose/service metadata is provided; no Build, Deploy, restart, or rollback was executed.
+- Audio/TTS Eleven V4 integration — 2026-11-06
+  - Added `elevenlabs/eleven-v4` and `elevenlabs/eleven-v4-turbo` to the canonical TTS model registry with documented 10,000-character behavior, Stability/Similarity controls, and Alicia as the documented default voice.
+  - Updated `app/api/generate/audio/route.ts` to accept `voice_id`, route both model IDs to WaveSpeed, and send only `text`, `voice_id`, `stability`, and `similarity` for these endpoints. Existing legacy TTS payloads remain unchanged.
+  - Updated `public/stude/sound.html` with independent model selection and Stability/Similarity controls; model changes preserve script text and refresh the existing quote path.
+  - Verification: `npx tsc --noEmit` did not complete within the bounded Codex run; focused Vitest was blocked before tests by Windows Temp `EPERM` rename. `git diff --check` reached pre-existing repository memory/document trailing-whitespace findings and `.git/fsmonitor` IPC warning. No paid generation or production deployment was performed.
+  - Known remaining work: replace the static embedded voice list with provider-backed ElevenLabs voice discovery/filter pagination, and replace the current legacy voice-cloning fallback with a verified official cloning provider contract before claiming cloning complete.
+- P0 WaveSpeed ElevenLabs completion pass — 2026-11-06
+  - Verified the attached DOCX and official WaveSpeedAI docs: V4/Turbo accept `text`, `voice_id`, `stability`, `similarity`; max text is 10,000 characters; V4 is $0.08/1k chars and Turbo $0.04/1k; WaveSpeed documents named Voice IDs and direct ElevenLabs Voice IDs, but no official cloning endpoint in the approved Voice ID contract.
+  - Added the 66 names documented by WaveSpeed to `lib/voice-catalog.ts` as WaveSpeed-compatible IDs without fabricated avatars/previews. `/api/voices` now accepts `model` filtering. Existing Gemini voices remain.
+  - Added model-specific TTS credit formulas to `lib/pricing.ts` using the existing 1.4 margin and 40 credits/USD conversion. Added 10,000-character validation and preserved legacy TTS pricing/routing.
+  - Removed the fake localStorage/setTimeout clone creation behavior from `components/voices/VoiceLibraryModal.tsx`; the UI now reports that WaveSpeed Voice ID documentation does not prove cloning availability.
+  - Verification: `test/model-definition-registry.test.ts` passed 11/11 with Temp/TMP redirected to `artifacts/vitest-tmp`. Full focused audio run still has the pre-existing/independent voice-cloning pricing assertion failure (expected 3, received 89.6). TypeScript and production build did not finish within the bounded run; build stopped during optimized production compilation. No paid request or production deployment occurred.
+- P0 WaveSpeed test completion — 2026-11-06
+  - Root cause fixed: legacy `voice-cloning` was incorrectly routed through character-priced TTS in `buildAudioChargeQuote`; it now uses the existing flat `minimax/voice-clone` charge (89.6 Credits), while Eleven V4/Turbo remain character-priced.
+  - Updated stale cloning-pricing assertions and added exact V4/Turbo pricing tests. Audio-focused suite now passes 6 files / 37 tests.
+  - The official Voice ID page currently lists 64 names, not 66; the catalog and regression test intentionally use 64 to avoid inventing two undocumented voices. This is a source-evidence gap against the requested count of 66.
+  - TypeScript remained running without output beyond the bounded verification window. Production build reached Webpack then failed on Windows/Codex `EPERM` while creating `.next` and, with `NEXT_DIST_DIR=artifacts/next-build`, while creating `artifacts/next-build/server/app/api/generate/captions/status`; the second attempt also encountered offline Google Fonts resolution. No paid or production action occurred.
+- P0 Windows TypeScript/Next build verification — 2026-11-06
+  - Full TypeScript completed with `npx tsc --noEmit --incremental false --pretty false --extendedDiagnostics`: exit 0, 72.24s, 4,618 files, ~2.09GB peak compiler memory. The only real error was the missing `similarity?: number` field in `AudioRequestBody`; it was added.
+  - Removed `typescript.ignoreBuildErrors` and the temporary `NEXT_DIST_DIR` config so production verification cannot bypass type errors or depend on a diagnostic output path.
+  - The first clean sandbox build reached Webpack and failed with filesystem `EPERM` while creating generated `.next/server/app/...` route folders. An unchanged escalated build completed successfully: exit 0, 240.96s, all routes compiled and type validity checked.
+  - Google Fonts failure was environmental (`fonts.googleapis.com` DNS unavailable). Removed build-time `next/font/google` imports from sidebar, landing navbar, Powerhouse, and Storyboard; retained CSS font fallbacks so the build has no external font-fetch dependency.
+  - Audio acceptance rerun after environment-only changes: 6 files / 37 tests passed. No audio logic or pricing changed in this task. No paid generation or deployment occurred.
+- P0 Deploy Manager / GitHub Actions readiness — 2026-11-06
+  - GitHub repository is `saadstudio-source/saad-studio`; local branch is `migration/contabo`. Local HEAD is `ef7bc1ef2acc7084732af721a4698ce370865ba9`, one commit ahead of `origin/migration/contabo` (`52c6b5b`); audio/build changes remain uncommitted in the worktree, so no single publishable commit currently contains all verified changes.
+  - The latest available failed workflow run (`42013284172`, `3b78e54`) failed in `validate` before integration, verify, deploy-manager-tests, or deploy; GitHub did not expose step logs with the available repository permission, so the exact shell line is not provable. No rerun or dispatch was triggered.
+  - `deploy.yml` has read-only contents permission, validates action/ref, runs manager tests, TypeScript, Vitest, build, isolated Postgres integration, then uses the four Contabo production secrets and `sudo -n /opt/saadstudio/bin/deploy-release`. The Workflow exists on `migration/contabo`; the repository default branch is `main`.
+  - Fixed the Deploy Manager source UI so the production buttons dispatch `deploy.yml` through GitHub Actions and use its recorded SHA for rollback. Direct SSH remains diagnostic/backward-compatible only and is no longer the production button path. This is source-only; the portable EXE has not been rebuilt or distributed.
+  - Read-only public health check on 2026-11-06 returned HTTP 200 and `ok:true`, database healthy, ffmpeg available, and no missing required environment variables. Contabo SSH, Docker, disk, database internals, backup integrity, and production secrets were not independently verified because no configured Deploy Manager credentials were available in this workspace; no production mutation was made.
+  - Fresh verification after the manager fix: Deploy Manager tests 15/15, audio acceptance 37/37, full TypeScript exit 0 in 73.48s, production build exit 0 in 271.88s. No paid request, workflow dispatch, deployment, backup creation, rollback, or force push occurred.
+  - Correction — 2026-11-07: Direct SSH is restored as the Deploy Manager production default. GitHub Actions dispatch remains available as a secondary IPC/UI capability; no server, backup, push, or workflow operation was performed. The unpublished release commit was amended locally to remove the accidental primary-path change.

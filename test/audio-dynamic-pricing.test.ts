@@ -68,11 +68,18 @@ describe("Audio Suite Unified Dynamic Pricing Suite", () => {
     expect(calculateTtsCredits(5000)).toBe(17);
   });
 
-  // ── 4. CLONED VOICE TTS USES SAME CANONICAL FORMULA ──
-  it("verifies Cloned Voice TTS uses the same canonical character-based formula", () => {
+  it("uses the documented WaveSpeed V4 and Turbo rates with SaadStudio margin", () => {
+    expect(calculateTtsCredits(1000, "elevenlabs/eleven-v4")).toBe(5);
+    expect(calculateTtsCredits(10000, "elevenlabs/eleven-v4")).toBe(45);
+    expect(calculateTtsCredits(1000, "elevenlabs/eleven-v4-turbo")).toBe(3);
+    expect(calculateTtsCredits(10000, "elevenlabs/eleven-v4-turbo")).toBe(23);
+  });
+
+  // ── 4. LEGACY VOICE CLONING IS NOT TTS ──
+  it("keeps legacy Voice Cloning on its flat minimax/voice-clone charge", () => {
     const text627 = "A".repeat(627);
-    expect(getAudioActionCredits("voice-cloning", text627)).toBe(3);
-    expect(getAudioActionCredits("voice-cloning", { text: text627 })).toBe(3);
+    expect(getAudioActionCredits("voice-cloning", text627)).toBe(89.6);
+    expect(getAudioActionCredits("voice-cloning", { text: text627 })).toBe(89.6);
   });
 
   // ── 5. DEFAULT FALLBACK SANITY CHECKS ──

@@ -12,7 +12,35 @@ export interface VoiceDefinition {
   provider: "gemini" | "elevenlabs" | "wavespeed" | "custom";
   geminiVoiceId?: string;
   isCloned?: boolean;
+  compatibleModels?: string[];
 }
+
+/** Names documented by WaveSpeed's ElevenLabs Voice ID page. These are IDs,
+ * not locally invented voice records; WaveSpeed accepts the names directly. */
+const WAVESPEED_ELEVEN_VOICE_NAMES = [
+  "Adam", "Alice", "Alicia", "Aria", "Baxter", "Bella", "Bill", "Brian", "Caleb", "Callum",
+  "Charlie", "Charlotte", "Chris", "Clyde", "Daniel", "Darian", "Dave", "Dorothy", "Drew", "Eddie",
+  "Elara", "Eldrin", "Elowen", "Emily", "Eric", "Ethan", "Fin", "Finley", "Florence", "Freya",
+  "George", "Gigi", "Giovanni", "Glinda", "Grace", "Harry", "Jade", "James", "Jeremy", "Jessica",
+  "Jessie", "Joseph", "Kaelen", "Laura", "Lawrence", "Liam", "Lily", "Maisie", "Matilda", "Michael",
+  "Mimi", "Nicole", "Patrick", "Paul", "River", "Roger", "Sarah", "Sawyer", "Serena", "Talia",
+  "Thomas", "Warren", "Will", "Wyatt",
+] as const;
+
+export const WAVESPEED_ELEVEN_VOICES: VoiceDefinition[] = WAVESPEED_ELEVEN_VOICE_NAMES.map((name) => ({
+  id: name,
+  name,
+  avatar: "",
+  language: "Multilingual",
+  accent: "WaveSpeedAI · ElevenLabs Voice ID",
+  gender: "neutral",
+  category: "conversational",
+  tag: "CHAT",
+  tagColor: "blue",
+  sampleUrl: "",
+  provider: "wavespeed",
+  compatibleModels: ["elevenlabs/eleven-v4", "elevenlabs/eleven-v4-turbo"],
+}));
 
 export const VOICE_CATALOG: VoiceDefinition[] = [
   // ─── 1. Narration Voices ──────────────────────────────────────────
@@ -456,4 +484,5 @@ export const VOICE_CATALOG: VoiceDefinition[] = [
     provider: "gemini",
     geminiVoiceId: "Enceladus",
   },
+  ...WAVESPEED_ELEVEN_VOICES,
 ];

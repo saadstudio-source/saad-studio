@@ -1,3 +1,128 @@
+## إعادة بناء وتطوير واجهة مدير النشر والتشغيل SaadStudio Deploy Manager (2026-11-04)
+
+- **الهدف والمتطلبات**:
+  - إعادة بناء واجهة تطبيق Windows لمدير النشر `SaadStudio Deploy Manager` في المجلد `deploy-manager/` بتصميم SaaS Dashboard داكن واحترافي.
+  - دعم كامل للغة العربية والاتجاه RTL مع خطوط واضحة وأيقونات SVG متناسقة ومنع أي تداخل للنصوص أو العناصر.
+  - تقسيم التطبيق إلى ثلاثة أقسام هيكلية:
+    1. **الشريط الجانبي (Sidebar)**: بعرض ثابت (270px) يضم شعار SaadStudio، بطاقة بدء معالج الإعداد السريع، قائمة التنقل بين التبويبات (لوحة التحكم، إعدادات GitHub، إعدادات Contabo، إدارة مفاتيح SSH، سجل النشر، الإعدادات العامة)، وشريط مؤشرات حية لحالات الخدمات (GitHub, Contabo, Actions, Health).
+    2. **لوحة التحكم الرئيسية (Main Dashboard)**: شبكة بطاقات حالة مستقلة رباعية (حساب GitHub، خادم Contabo، جاهزية Actions، صحة الموقع 200 OK)، بطاقة بطل النشر (Hero Deployment Card) بزر كبير ومضيء «نشر الإصدار الرئيسي الآن» وزر «التراجع عن آخر إصدار»، وشبكة منقسمة لسجل آخر عمليات النشر ووحدة الطرفية ومخرجات الأوامر.
+    3. **معالج الإعداد الأولي (Interactive 5-Step Setup Wizard)**: خطوات تفاعلية (ربط GitHub، ربط Contabo، فحص بصمة SSH، إعداد المفاتيح والـ Secrets، واختبار الجاهزية الشاملة).
+  - حل مشكلة بصمة SSH من جذورها: تحويل مصفوفة البايتات الخام القادمة من المصافحة عبر `window.crypto.subtle.digest("SHA-256")` إلى ترميز Base64 بصيغة `SHA256:...` القياسية بدلاً من سلسلة أرقام مشوهة، مع فرض فحص وتحقق أمني مستقل قبل الاعتماد.
+  - أمان فائق: حظر كشف المفاتيح الخاصة وكلمات المرور في السجلات، نوافذ تأكيد منبثقة احترافية قبل النشر أو التراجع، وتعطيل زر النشر تلقائياً عند عدم اكتمال الجاهزية لحماية الإنتاج.
+  - الحفاظ الصارم على الباك إند: عدم تعديل `main.cjs` أو `preload.cjs` أو `oauth-flow.cjs` أو نظام النشر.
+- **التحقق والاختبار الشامل**:
+  - اختبار حقيقي عبر Playwright وElectron على أبعاد: 1280×720 و1920×1080 و3440×1440.
+  - التقاط 14 لقطة شاشة موثقة لجميع الشاشات والتبويبات والمعالج ونافذة التأكيد.
+  - نجاح تام لاختبارات `oauth-flow.test.cjs` بـ Exit Code 0 وصفر أخطاء كونسول.
+
+## توحيد بوكس البرومبت وزر التوليد وتثبيت عرض لوحة الفيديو على 400px (2026-11-04)
+
+- تم إنجاز التكامل الكامل بين شريط إعدادات الفيديو وبوكس البرومبت الأصلي في `/video` مع إزالة أي عناصر مكررة وفق المتطلبات الصارمة:
+  1. **توحيد بوكس البرومبت (Single Source of Truth Prompt Box)**:
+     - اعتماد بوكس البرومبت الأصلي أسفل مساحة المعاينة كمصدر وحيد للنص لكل الأدوات والعمليات.
+     - إزالة جميع حقول البرومبت المكررة من داخل الشريط الجانبي.
+     - ربط ديناميكي للعنوان والـ Placeholder:
+       * عند توليد الفيديو (`Create Video`): يظهر النص الافتراضي `Describe the video you want to create…`.
+       * عند اختيار `Object Swap`: يُستخدم البرومبت الأصلي لوصف العنصر البديل (`change_to`) مع ظهور نص توجيهي مباشر وبطاقة معاينة فورية داخل اللوحة لأي نص يُكتب، مع إبقاء حقل العنصر المستهدف (`target`) فقط داخل اللوحة مع وسومه السريعة (`+jacket`, `+hair`, إلخ).
+       * عند اختيار `Upscale`: يتعطل بوكس البرومبت تلقائياً مع إشعار توضيحي صريح: `أداة رفع دقة الفيديو لا تتطلب وصفاً نصياً`.
+       * عند اختيار `Edit Video`: يطلب وصف التعديلات الدقيقة في بوكس البرومبت الرئيسي.
+       * عند اختيار `Motion Control`: يدعم توجيهاً اختيارياً للحركة والكاميرا والستايل.
+  2. **توحيد زر التوليد وعرض السعر مرة واحدة (Single Execution Button & Price)**:
+     - اعتماد الزر الأصلي أسفل بوكس البرومبت (`#video-unified-generate-btn`) كزر وحيد للتنفيذ لكافة التبويبات والأدوات.
+     - إزالة أزرار التوليد المكررة من داخل اللوحة (`Generate Swap`, `Upscale Video`, `Apply Edit`, وزر التوليد من شريط الإعدادات).
+     - عرض السعر مرة واحدة فقط بجوار زر التوليد الأصلي مع تحديثه اللحظي والديناميكي حسب الموديل، الأداة، الدقة، والمدة.
+     - يتغير نص الزر وحالة تفعيله فورياً حسب جاهزية المدخلات (`توليد الفيديو`, `توليد استبدال العنصر`, `رفع دقة الفيديو`, `توليد نقل الحركة`).
+  3. **تثبيت عرض لوحة الإعدادات على 400px بدقة قياسية**:
+     - تثبيت عرض `<aside id="video-settings-sidebar">` على 400px فعلياً مع منعه من الانكماش (`style={{ width: 400, minWidth: 400, maxWidth: 400 }}`).
+     - التحقق عبر فحص القياسات البرمجي في Playwright بواسطة `getBoundingClientRect().width` والتأكد من مطابقتها لـ 400px بالضبط على شاشات سطح المكتب (1920×1080) والشاشات العريضة (3440×1440) مع انعدام أي تمرير أفقي (`hasHorizontalScroll: false`).
+  4. **تنظيم الحقول بقوائم منسدلة (Dropdown) وأكورديون قابل للطي**:
+     - تحويل أزرار الدقة والموديلات والمدد إلى قوائم منسدلة `<select>` أنيقة بخطوط واضحة.
+     - طي الخيارات الثانوية في `Object Swap` (الصورة المرجعية +1.12 كريديت، سويتش نمط التبديل كائن مقابل خلفية، والبذرة العشوائية) داخل أكورديون قابل للتوسيع.
+     - الإبقاء على مفاتيح التبديل الثنائية (Toggle Switches) للأوضاع الوظيفية فقط.
+  5. **التحقق الشامل بالأدلة**:
+     - TypeScript: نجاح تام بـ 0 أخطاء عبر `npx tsc --noEmit`.
+     - بناء الإنتاج: نجاح `npm run build` لـ 263 مساراً بـ Exit Code 0.
+     - اختبارات Playwright الآلية: تنفيذ محاكاة كاملة للتنقل ورفع الفيديو واختبار الحقول والتحقق من حالات التفعيل وتوثيق اللقطات في مجلد الأرتفاكتس.
+
+## تحسين قابلية القراءة وتوسيع شريط أدوات الفيديو واستعادة هوية SaadStudio الأصلية (2026-11-04)
+
+- تم تحسين قابلية القراءة والتسلسل البصري لشريط أدوات الفيديو في `/video` بالكامل مع الحفاظ التام على الوظائف والتبويبات:
+  1. **استعادة ألوان SaadStudio الأصلية وإزالة الأصفر الفسفوري**:
+     - إزالة درجات الأصفر الفسفوري (`#ccff00`/`#dfff00`) المستعارة من Higgsfield في جميع المكونات.
+     - اعتماد ألوان SaadStudio الأساسية: السيان (`#06b6d4`, `text-cyan-400`, `bg-cyan-500`) والأزرق التدرجي (`#2563eb`)، وشارات `NEW` بالسيان وشارات `READY` بالزمردي (`emerald`).
+     - اعتماد تدرج السيان/الأزرق لأزرار التوليد والتشغيل الأساسية (`linear-gradient(135deg, #06b6d4, #2563eb)`).
+  2. **توسيع لوحة الإعدادات (360–400px)**:
+     - تم توسيع الشريط الجانبي من 288px الضيقة إلى `w-[360px] xl:w-[384px] 2xl:w-[400px]` على شاشات سطح المكتب.
+     - ضمان مرونة مساحة المعاينة المركزية مع `flex-1 min-w-0 overflow-hidden` لمنع أي تمرير أفقي أو انكسار في التخطيط.
+  3. **تكبير مقاييس الخطوط (Typography Hierarchy)**:
+     - عناوين الأقسام: 16–18px عريضة وواضحة.
+     - أسماء الأدوات والموديلات: 14–16px (منع تقطيع اسم Kling 2.6 Motion Control على أسطر متعددة بفضل العرض المريح).
+     - الحقول والأزرار: 14px على الأقل بخط مقروء ومريح للعين.
+     - النصوص التوضيحية: 12–13px لتحقيق تباين وقراءة واضحة.
+  4. **تنظيم المحتوى والتبويبات**:
+     - تنظيم التبويبات الثلاثة في شبكة متساوية (`grid grid-cols-3`) مع مؤشر سفلي تدرجي بالسيان والأزرق.
+     - محاذاة ثابتة ومريحة لقائمة أدوات التحرير التسعة مع تباعد مناسب.
+     - تنظيم حقول Motion Control وعناصر التبديل وسويتش التحكم بالمشهد بدقة وتناسق.
+  5. **التحقق والاختبار الشامل**:
+     - اجتياز اختبار TypeScript بـ 0 أخطاء وبناء Next.js الإنتاجي (263 مساراً) بنجاح.
+     - التقاط لقطات حقيقية على المنفذ 57230 بدقة 1920×1080، ودقة 3440×1440 للشاشات العريضة، ودقة 393×852 للهواتف الذكية مع التأكد من عدم وجود نصوص مقطوعة أو عناصر متداخلة.
+
+## توحيد معمارية شريط أدوات الفيديو الجانبي وتكامل التبويبات المتعددة في /video (2026-11-04)
+
+- تم تحديث وتطوير منطق شريط أدوات الفيديو الجانبي في صفحة `/video` ليعتمد بنية التبويبات الثلاثية الاحترافية استناداً إلى الصور المرجعية الأربعة مع الحفاظ الصارم على هوية SaadStudio البصرية، ألوان الثيم الداكن، مساحة المعاينة المركزية، وشريط التنقل العلوي:
+  1. **تبويب توليد الفيديو (Create Video)**:
+     - يحتفظ بكامل إمكانيات واستقرار محرر التوليد الحالي: التبديل بين الوسائط المرجعية (`References`) وإطارات البداية والنهاية (`Frames`).
+     - قائمة نماذج الذكاء الاصطناعي مع شارات القدرات والتسعير، شريط أدوات التمديد (`Video Extension`)، نسب العرض والارتفاع، الجودة والصوت المدمج، واحتساب الكريديت الديناميكي.
+  2. **تبويب أدوات التحرير (Edit Video)**:
+     - يعرض قائمة أدوات التحرير التسعة مطابقة للصورة المرجعية الرابعة: Edit Video, Extend Video, Reframe, Upscale, Remove Background, SDR to HDR, FPS Boost, Depth Map.
+     - عند النقر على أي أداة مدعومة (مثل `Object Swap` أو `Upscale` أو `Edit Video`)، تنبثق حقول الإدخال والإعدادات داخل الشريط الجانبي نفسه مع زر عودة أنيق (`← All Editing Tools`).
+     - أداة `Object Swap`: سحب وإفلات فيديو المصدر (3-15 ثانية)، إدخال العنصر المستهدف مع وسوم سريعة (`+jacket`, `+hair`, إلخ)، إدخال العنصر البديل مع ستايلات جاهزة، رفع صورة مرجعية اختيارية، تحديد وضع التبديل (`change` أو `background`)، والدقة والتسعير التلقائي.
+     - أداة `Video Upscaler`: رفع الفيديو، اختيار الدقة المستهدفة (1080p, 2K, 4K) ومعامل التكبير (2x, 4x) مع التسعير الدقيق.
+     - أداة `Extend Video`: تحويل سلس ومباشر إلى وضع التمديد داخل محرر التوليد.
+  3. **تبويب التحكم بالحركة (Motion Control)**:
+     - مطابق تماماً للصورة المرجعية الثالثة: بانر علوي مع زر إرشادات "How it works".
+     - منطقتا رفع مخصصتان: فيديو الحركة المرجعي (`Add motion to copy` من 3 إلى 30 ثانية) وصورة الشخصية (`Add your character` مع وضوح الوجه والجسد) مع قراءة فورية للأبعاد والمدة والحجم.
+     - اختيار الموديل محصور بنماذج Kling الرسمية للتحكم بالحركة (`kwaivgi/kling-v2.6-std/motion-control` و Kling 3.0 Motion Control).
+     - محدد نمط التحكم بالمشهد (`Scene control mode`) بزر تحويل وسويتش ثنائي (`Video` | `Image`) لاختيار مصدر الخلفية.
+     - إعدادات متقدمة مطوية (الصوت الأصلي، البذرة، والبرومبت).
+     - تسعير لحظي حسب مدة الفيديو بنظام الكريديت (3.92 كريديت/ثانية لـ Kling 2.6).
+- الحفاظ على الروابط القديمة (Backward Compatibility):
+  - مسار `/video-tools/motion-transfer` يقوم بإعادة التوجيه التلقائي إلى `/video?tab=motion`.
+  - مسار `/video-tools/object-swap` يقوم بإعادة التوجيه التلقائي إلى `/video?tab=edit&tool=object-swap`.
+  - مسار `/video-tools/video-upscaler` يتكامل عبر التوجيه إلى `/video?tab=edit&tool=upscale`.
+- تم التحقق بصرياً وبرمجياً عبر Playwright على الخادم الإنتاجي (المنفذ 57230) من سلاسة التنقل، رفع الوسائط، استخراج الميتاداتا، وتحديث الأسعار دون أي خصم كريديت أو إطلاق مهام مدفوعة.
+
+## إعادة تصميم استوديو استبدال العناصر السينمائي (Object Swap Studio) (2026-11-04)
+
+- تم بناء واجهة سينمائية متكاملة ثلاثية الأعمدة لمسار استبدال العناصر `/video-tools/object-swap` بمستوى أدوات الإنتاج السينمائي الاحترافية.
+- مدخلات الوسائط والعناصر:
+  - بطاقة رفع فيديو المصدر (MP4/MOV/WEBM حتى 50MB مع استخراج تلقائي فوري للمدة والأبعاد والحجم وإمكانية الاستبدال أو المعاينة).
+  - تحديد العنصر المستهدف المطلوب تغييره (`target`) مع وسوم سريعة سهلة الاختيار بنقرة واحدة (`+jacket`, `+hair`, `+car`, `+shoes`, `+shirt`, `+glasses`, `+sky`, `+watch`).
+  - تحديد العنصر البديل (`change_to`) مع وسوم ستايل سينمائية (`+cyberpunk neon...`, `+golden luxury...`, `+futuristic metallic...`).
+  - رفع اختياري لصورة مرجعية (`image`) للبديل مع إشعار الرسوم الإضافية (+1.12 cr).
+- منطقة المعاينة والمسرح السينمائي (Center Stage):
+  - مشغل فيديو سينمائي بمظهر الكاميرا وعلامات التسجيل وشبكة التركيب.
+  - شريط مقارنة تفاعلي بالسلايدر (Before/After Curtain Split) لمقارنة الإطار الأصلي مع التعديل الناتج.
+  - قائمة فحص جاهزية المدخلات التفاعلية (Readiness Checklist) تتحول للأخضر فور اكتمال الشروط المطلوبة.
+  - مؤقت ومراحل تقدم رباعية حية للتوليد، وزر تنزيل MP4 مباشر للفيديو الناتج عند التوفر.
+- لوحة الإعدادات والتسعير:
+  - دعم دقيق لنموذج `wavespeed-ai/openjutsu/object-swap` الرسمي.
+  - وضعان للاستبدال: `change` (تغيير كائن محدد كاللباس أو السيارة)، و`background` (تغيير الخلفية مع الحفاظ على الأشخاص).
+  - دقة الفيديو: `480p`, `540p`, `768p`, `1080p`.
+  - مدة الفيديو: سلايدر من 3 إلى 15 ثانية مع أزرار سريعة (`3s`, `5s`, `8s`, `10s`, `12s`, `15s`).
+  - خيارات متقدمة: Seed وNegative Prompt.
+  - تسعير تلقائي من المعادلة الرسمية: `((duration * rate + refFee) * 1.4 * 40)` كريديت، مع فحص رصيد المستخدم.
+- فحص وتشخيص أصول الويب على المنفذ 57230:
+  - تم حل مشكلة تعارض كاش `next dev` مع حزم `next build` بإزالة `.next` المتضارب وبناء نسخة إنتاجية نظيفة وتشغيل خادم موثوق على المنفذ 57230 مع استجابة 200 لكافة ملفات الـ CSS وJS.
+
+## إعادة تصميم استوديو نقل الحركة السينمائي (Motion Transfer Studio) (2026-11-04)
+
+- تم بناء واجهة سينمائية متكاملة ثلاثية الأعمدة لمسار نقل الحركة `/video-tools/motion-transfer`.
+- مدخلات الوسائط: بطاقتان مخصصتان لسحب وإفلات فيديو الحركة المرجعي (MP4/MOV/WEBM حتى 50MB مع استخراج تلقائي للمدة والأبعاد والحجم والصوت) وصورة الشخصية المستهدفة (PNG/JPG/WEBP حتى 15MB مع فحص الأبعاد).
+- منطقة المعاينة السينمائية: إطارات كاميرا تفاعلية، حالة استعداد ذكية مع قائمة فحص الجاهزية، ومراحل تقدم حية رباعية أثناء التوليد (رفع الوسائط -> جدولة الموديل -> رندرة الحركة -> الاكتمال)، ووضع مقارنة تفاعلي بالسلايدر (Before/After Curtain Split).
+- إعدادات الموديل: التوافق الدقيق مع عقد WaveSpeed الرسمي لنموذج `kwaivgi/kling-v2.6-std/motion-control` مع 5 زوايا توجيه للشخصية (video, image, front, side, back)، دقة 720p/1080p، مدة 3-30 ثانية، والاحتفاظ بالصوت الأصلي.
+- محطة التسعير: احتساب دقيق للكريديت بمعدل 3.92 كريديت لكل ثانية (`duration * 0.07 * 1.4 * 40`) مع فحص الرصيد الفعلي للمستخدم وتعطيل الزر في حال نقص المدخلات أو الرصيد.
+
 ## تصحيح سقف Cloud Agent واختيار tier التسعير (2026-09-25)
 
 - أزيلت قاعدة `maxCreditsPerRequest = 1` الافتراضية لأنها ليست قرار Product معتمد.
@@ -5130,3 +5255,153 @@
 - إذا كتب المستخدم وسوماً قديمة مثل `@Image1` في Prompt، يحولها الخادم إلى `<Picture 1>` قبل إرسالها إلى WaveSpeed، حتى لا تفشل الطلبات القديمة بسبب صيغة مرجع غير مناسبة لـH3.
 - الصور المرفوعة في لوحة References لموديلات H3 تبقى مراجع فقط ولا تُنسخ تلقائياً إلى Start/End. استخدام Start/End يتم فقط من خانات Start frame وEnd frame المخصصة.
 - لا تغير في السعر أو الكريديت أو ledger أو auth أو مسارات المزود؛ التصحيح يخص بناء Prompt/H3 payload فقط.
+# تحديث تنفيذ Saad Influencer Studio (2026-10-10)
+- أضيف مسار مستقل `/influencer-studio` ومكوّن مستقل `components/influencer-studio/InfluencerStudioPage.tsx` وسجل قدرات `lib/influencer-studio-capabilities.ts`.
+- المسار لا يعيد استخدام واجهات Shots أو Cinema Flow أو Cinema Studio. يعتمد فقط على خدمات التوليد والمصادقة والرصيد والتخزين القائمة.
+- Create/Photos يرسلان إلى `/api/generate/image`، وVideos إلى `/api/video` مع `Idempotency-Key`. النماذج غير المرتبطة بمسار تنفيذ مثبت معروضة كغير متاحة.
+- الحالة الحالية: واجهة وتنفيذ أولي متكاملان على مستوى المسارات، لكن التكامل الحي، رفع الملفات عبر signed upload، quote النهائي، واختبارات E2E لم تكتمل؛ لا تُعلن Production Ready.
+# تحديث تدقيق Saad Influencer Studio (2026-10-10)
+
+المسار `/influencer-studio` أصبح قابلاً للتشغيل المحلي، مع quote خادمي، قراءة رصيد Clerk، signed upload للصور الثلاث، ومتابعة حالة مهمة الفيديو. تم ربط اختيارات Hair/Style/Niche بالنص المرسل، وتطبيق اتجاه الصفحة من لغة التطبيق. تحقق TypeScript وESLint وفتح Playwright للمسار بنجاح دون أخطاء Console؛ ما زالت اختبارات build الإنتاجية، الاختبارات الآلية الكاملة، وتجربة جلسة مصادقة فعلية مطلوبة قبل أي إعلان جاهزية إنتاجية.
+
+# تحديث 2026-10-10 — مكتبة Influencer المعتمدة
+
+تم اعتماد الكولاج المرجعي النهائي كمصدر للمكتبة، واستخراجه إلى 16 ملف WEBP مستقل داخل `public/influencer-studio/characters/` بالترتيب: Luna، Arthur، Kai، Zara، Mateo، Rose، Jin، Amara، Leo، Priya، Nova، Ethan، Freya، Omar، Mia، Sol. الواجهة تستخدم هذه الملفات في الـHero والمعرض واختيار Influencer، ويُمرر رابط الصورة الفعلي إلى مسارات Photos وVideos. لم تُنفذ عمليات توليد مدفوعة.
+
+تمت مطابقة نافذة Action مع المرجع بصرياً عبر ست بطاقات صور مستقلة، مع بقاء أسماء الخيارات وقيمة action في طلب الفيديو كما هي.
+
+أعيد تدقيق الصفحة كاملة مقابل المرجع الحي؛ أضيفت أقسام العرض التعريفي، الأسئلة الشائعة، ونداء الإجراء أسفل المحرر حتى لا تتوقف الصفحة عند منتصف المحتوى.
+
+تم ضغط صندوق المحرر والأدوات بعرض أقصى ومسافات وارتفاع Prompt أقرب إلى مرجع WaveSpeed، مع إبقاء المسارات الوظيفية دون تغيير.
+
+تم تثبيت هندسة المحرر عند تبديل RTL/LTR؛ يتغير اتجاه النص فقط، ولا تنقلب الأعمدة أو تتحرك الأدوات والزر.
+
+تم إلغاء الربط المؤقت بصفحة Cinema القديمة؛ تنفيذ Cinema الحالي سيُبنى كواجهة مستقلة وفق المرجع الحالي، دون استخدام صفحة Shots أو المكوّن القديم.
+
+أضيفت واجهة Cinema مستقلة في `components/cinema-studio/CinemaStudioPage.tsx` ومسار `/cinema-studio`، وتشمل بنية المرجع الحالية دون استيراد صفحة Shots أو المكوّن القديم.
+
+## إصلاح تحميل الصور المرجعية في توليد الصور (2026-10-11)
+
+- `/api/assets` لا يجب أن يعتمد نجاحه على مزامنة حالة مزوّد خارجي. مصالحة المهام العالقة تعمل الآن بمهلة قصيرة وتفشل بهدوء، ثم يرجع المعرض الأصول المخزنة من قاعدة البيانات. هذا يمنع تحويل بطء Status API أو اتصال Contabo/Caddy بمزوّد خارجي إلى 502 في واجهة المعرض.
+- قبل توليد صورة مع مراجع، يحوّل الخادم أي Data URL أو مسار تخزين إلى رابط عام عبر التخزين الدائم، ثم يتحقق أن الرابط قابل للوصول وأن المحتوى صورة فعلية قبل الخصم وقبل provider dispatch.
+- إذا فشلت كل الصور المرجعية في التحميل أو لم تكن صوراً قابلة للفك، يرجع الطلب خطأ واضح `references_unreachable` ولا يتم خصم كريديت ولا إرسال طلب مدفوع.
+- لم تتغير أسعار الموديلات أو نظام الاشتراك أو ledger أو مخطط قاعدة البيانات.
+
+## عقد تحقق الوسائط المرجعية قبل التوليد (2026-10-11)
+- أي ملف مرجعي يدخل مسار توليد مدفوع يجب أن يمر قبل الخصم عبر حلّ رابط التخزين إلى رابط عام صالح للمزوّد، ثم تحقق وصول HTTP، ثم تحقق نوع الملف وتوقيعه الفعلي.
+- الأنواع المدعومة في التحقق المركزي: صورة، فيديو، صوت. الصور تُقبل بتواقيع JPEG/PNG/WebP/GIF/AVIF، الفيديو بحاويات MP4/MOV/WebM/AVI، والصوت بتواقيع MP3/WAV/Ogg/FLAC/M4A.
+- إذا فشل أي مرجع مرفق في التحميل أو MIME أو التوقيع، يفشل الطلب قبل spendCredits وقبل إنشاء مهمة لدى المزود. لا يجوز إسقاط مرجع سيئ بصمت ثم متابعة توليد مدفوع.
+- يشمل العقد مسارات الصور، الفيديو، الصوت، Start Frame، End Frame، Start+End، ومراجع متعددة في لوحة الويب وPanel routes. لا يغير هذا التسعير أو الهامش أو ledger أو سياسة الاشتراك.
+
+## تدقيق ما قبل نشر عقد الوسائط المرجعية (2026-10-11)
+- تحقق التوقيع لا يعتمد على تحميل الملف كاملاً. عند فحص ملف مرجعي، يستخدم الخادم `HEAD` ثم `GET` مع `Range: bytes=0-63`، ويقرأ أول 64 بايت فقط من stream حتى إذا تجاهل التخزين Range وأعاد `200`.
+- فروع Seedance الرسمية وGoogle Veo في `/api/video` تتبع الآن نفس عقد fail-closed: أي صورة/فيديو/صوت مرجعي يفشل الوصول أو MIME أو signature يوقف الطلب قبل الخصم وقبل provider dispatch، ولا يتم إسقاطه بصمت.
+- تواقيع الفيديو المدعومة في العقد تشمل MP4/MOV عبر ISO BMFF وWebM/MKV عبر EBML وAVI. تواقيع الصوت تشمل MP3/WAV/Ogg/FLAC وM4A/AAC، مع قبول `audio/mp4` كحاوية صوتية عند تطابق التوقيع.
+
+## عقد Seedance 2.5 في قائمة الفيديو (2026-10-11)
+- تعرض صفحة `/video` الآن موديلين منفصلين لا يتم خلطهما: `Seedance 2.5` للمسار القياسي `bytedance/seedance-2.5/text-to-video`، و`Seedance 2.5 Turbo` للمسار السريع `bytedance/seedance-2.5/text-to-video-turbo`.
+- `Seedance 2.5` القياسي يدعم `480p`, `720p`, `1080p`, `4k`، ومدة `4-30s`، ونسب `16:9`, `9:16`, `4:3`, `3:4`, `1:1`, `21:9`، ومراجع حتى `30` صورة و`10` فيديوهات و`10` صوتيات.
+- `Seedance 2.5 Turbo` يدعم `720p`, `1080p` فقط، ومدة `4-30s`، ونفس نسب الإخراج وحدود المراجع.
+- عند استخدام Start/End Frames، تختار الواجهة مسار I2V المطابق للبطاقة: القياسي إلى `image-to-video` وTurbo إلى `image-to-video-turbo`. أما Reference Inputs فتبقى على مسار Text/Reference الخاص بالموديل المختار.
+
+## عقد التخزين النشط Backblaze B2 للوسائط (2026-10-11)
+
+- Backblaze B2 هو كاتب التخزين النشط للوسائط. R2 يبقى مسار قراءة legacy فقط ولا يجب أن يتحول إلى كاتب بسبب متغيرات قديمة.
+- فشل كتابة B2، خصوصاً `AccessDenied: not entitled`، يفشل العملية بوضوح ولا ينتج رابطاً ناجحاً أو asset record مبني على ملف لم يُرفع.
+- عند حل روابط المراجع للمزوّد، يجب إثبات وجود الملف في B2 أو نجاح ترحيله إلى B2. إذا فشل الإثبات أو فشلت الهجرة، يتوقف طلب التوليد قبل الخصم وقبل أي provider dispatch.
+
+## 2026-10-11 13:53:32 +03:00 — Storage/B2 operational note
+- Media storage now fails closed when the active Backblaze B2 writer rejects writes, instead of returning successful asset URLs for objects that were not persisted.
+- Backblaze public URLs are derived from the configured bucket/region where possible; hardcoded legacy bucket assumptions must not be used for new delivery paths.
+- Production storage restoration requires a real B2 put/head/get/public-get diagnostic on Contabo before app restart. If Backblaze returns AccessDenied: not entitled, the external application key must be entitled for writeFiles and eadFiles on the configured bucket/prefixes.
+
+## 2026-10-11 18:20:56 +03:00 — Image reference drag/drop UX note
+- The Image page composer handles dragged image files with a dedicated overlay over the prompt editor and prevents browser-level file drops from interrupting the page. Dropped images continue to attach as reference files; generation, storage, credits, and provider routing are unchanged.
+
+## 2026-10-11 18:26:00 +03:00 — Video reference preview lifecycle note
+- Video composer reference previews use stable browser object URLs for attached image/video files. URLs are revoked when the corresponding file is removed or the page unmounts, preventing transient lob: preview failures while preserving the existing upload/generation flow.
+
+## Seedance 2.5 / 2.5 Turbo routing note — 2026-10-11 18:49:25 +03:00
+- Seedance 2.5 UI should expose two user-facing models only: Seedance 2.5 and Seedance 2.5 Turbo.
+- Text/reference routes:
+  - ytedance/seedance-2.5/text-to-video
+  - ytedance/seedance-2.5/text-to-video-turbo
+  - Supported provider fields: prompt, spect_ratio, duration, esolution, generate_audio, eference_images, eference_videos, eference_audios.
+- Image-to-video routes:
+  - ytedance/seedance-2.5/image-to-video
+  - ytedance/seedance-2.5/image-to-video-turbo
+  - Supported provider fields: prompt, image, optional last_image, duration, esolution, generate_audio; aspect ratio follows the input image and must not be sent.
+- Reference media are not start/end frames. Start/end must come from the explicit frame UI or explicit frame payload fields.
+
+## Seedance 2.5 pricing note — 2026-10-11
+- Seedance 2.5 4K pricing follows the WaveSpeed source evidence: 5 seconds at 4K shows $9.00 sticker and $8.10 after the provider 10% discount, so the discounted provider rate used by Saad Studio is $1.620/s.
+- With the existing Saad Studio pricing formula (providerUsdPerSecond × duration × 1.4 margin × 40 credits/USD), Seedance 2.5 4K for 5 seconds charges 453.6 cr.
+- Existing confirmed discounted rates remain 480p = .162/s, 720p = .180/s, 1080p = .240/s until newer source evidence is provided.
+
+## Seedance 2.5 release branch note — 2026-10-11
+- Release branch deploy/seedance-25-complete combines the Seedance 2.5 / Seedance 2.5 Turbo model-routing contract with the confirmed 4K WaveSpeed source pricing correction.
+- The production release scope exposes only two user-facing models, keeps I2V routes internal, sends text/reference media through eference_images, eference_videos, and eference_audios, and sends Start/End frames through image and last_image only.
+- The release does not change subscriptions, database schema, B2 credentials, production configuration, or unrelated model pricing.
+
+## 2026-10-12 — Seedance 2.5 pricing consistency note
+- Seedance 2.5 customer-credit calculation is centralized in `lib/credit-pricing.ts` for UI display, client preflight, and `/api/video` server charge.
+- Commercial formula remains unchanged: provider USD cost × 1.4 margin × 40 credits/USD.
+- Seedance 2.5 text/reference routes add reference-video duration to billable seconds when reference videos are present, capped at 30 seconds. Image-to-video routes use output duration only.
+- Seedance 2.5 Turbo supports only 720p and 1080p; unsupported 480p/4k are rejected instead of priced.
+
+## 2026-10-12 — Seedance 2.5 release verification note
+- Release commit `80834cdb836af3f4165af138c9444927b2c36372` keeps Seedance 2.5 display, routing, validation, reference media, start/end frame, pricing parity, and `DynamicVideoModel.provider` typing fixes together.
+- TypeScript comparison versus production base showed no new error signatures and removed the `DynamicVideoModel.provider` error. Remaining TypeScript errors are pre-existing and outside the Seedance release scope.
+- UI browser verification requires valid Clerk development credentials; without them it must be recorded as blocked rather than passed.
+
+## 2026-10-12 — Seedance 2.5 deployment status note
+- Seedance 2.5 release commit `80834cdb836af3f4165af138c9444927b2c36372` has been pushed to GitHub on `deploy/seedance-25-complete`.
+- Production deployment remains pending because this agent lacked authenticated SSH access to Contabo. No production service was changed.
+
+## 2026-10-12 — Seedance 2.5 quality options hotfix
+- Seedance 2.5 and Seedance 2.5 Turbo display names are canonical in code during dynamic-model normalization. Stale admin/database labels must not rename Turbo to `Seedance 2.5`, because that hides the standard model's `480p` and `4k` quality options.
+- Hotfix commit `f4f7422` preserves the standard model qualities `480p`, `720p`, `1080p`, `4k` and Turbo qualities `720p`, `1080p`.
+- **Audio Suite preview access (2026-10-25)**: `/api/voice-sample` is a public, free catalogue-preview endpoint. It must be allowlisted in `middleware.ts` before Clerk protection; otherwise browsers receive `401` before the route can return its `audio/mpeg` response, which surfaces as an HTML/error-stream `NotSupportedError`. Paid `/api/generate/audio` remains authenticated and may return `402` when the user's credit balance is insufficient.
+
+- **Hyper3D Rodin 2 pricing fix (2026-10-26)**: مسار `/api/3d` يستخدم `lib/pricing.ts` كمحلل الخصم، لذلك يجب أن يحتوي resolver نفسه على `hyper3d-rodin-2.text` و`hyper3d-rodin-2.image` بسعر ثابت 40 credit لكل وحدة. وجود السعر في جدول أحدث وحده لا يكفي إذا غاب alias/الحالة الخاصة من المحلل القديم.
+
+# WaveSpeed catalog integration note (2026-11-03)
+
+- تم تسجيل Kling 4.0 في سجل الفيديو بعقده الرسمي: text/image/reference/extend، 3-30 ثانية، 720p/1080p، ودعم المراجع متعدد الوسائط.
+- تم تحديث GPT Image 2.5 Flare/Sunburst لعرض الجودة `low/medium/high/xhigh/max` والدقة `1k/2k/4k` والنسب الرسمية.
+- أي تكامل MCP مستقبلي يجب أن يبقى server-side لمزامنة schema والأسعار واكتشاف الموديلات، مع اعتماد يدوي قبل تفعيل موديل مدفوع.
+- صفحة `/video-tools` تفصل الأدوات عن قائمة موديلات `/video`: Edit وExtend مرتبطتان بمسارات فعلية، وMotion Transfer/Object Swap لا يظهران كجاهزين حتى يثبت endpoint رسمي وpayload قابل للتحقق.
+- أدوات الفيديو المستقلة تستخدم صفحة `/video-tools/[tool]`: Motion Transfer على `kwaivgi/kling-v2.6-std/motion-control`، Object Swap على `wavespeed-ai/openjutsu/object-swap`، وVideo Upscaler على المسارين القياسي وUltimate. بعد الإرسال تُستطلع `/api/video?taskId=...` وتُعرض النتيجة أو الفشل صراحةً.
+- حالة الإنتاج لا تُعلن من شكل البطاقة: الاختبارات الحالية عقدية محلية، ولم يُنفذ توليد مدفوع؛ التحقق الحي يحتاج حساباً وموافقة منفصلين.
+- GPT Image 2.5 Flare/Sunburst يمر الآن عبر WaveSpeed REST endpoints الأربعة (`openai/gpt-image-2.5-*`) وليس OpenAI المباشر، مع فصل quality عن resolution وتسعير WaveSpeed الرسمي.
+- طبقة MCP الخادمية تستخدم JSON-RPC Streamable HTTP (`initialize` ثم `tools/list`) مع مصادقة server-side؛ لا تستدعي `run_model` تلقائياً ولا تكشف المفتاح للمتصفح.
+### WaveSpeed audit note — 2026-11-03
+تكامل GPT Image 2.5 يستخدم مسارات WaveSpeed الرسمية الأربعة، مع فصل الجودة عن الدقة وتمرير صيغة الإخراج PNG/JPEG/WebP، وحساب الرسوم خادمياً مع رسوم المراجع الإضافية في وضع التحرير. تكامل MCP يستخدم JSON-RPC initialize ثم tools/list ويدعم JSON وSSE؛ لا ينفذ run_model في مسار التدقيق. راجع `docs/WAVESPEED_FINAL_AUDIT.md` للأدلة والقيود الحالية.
+
+### Deploy Manager SSH note — 2026-11-04
+مفاتيح Ed25519 المخزنة بصيغة PKCS#8 تبقى كما هي داخل Windows Credential Manager. قبل تمريرها إلى `ssh2` يحولها التطبيق داخل الذاكرة إلى OpenSSH `openssh-key-v1`، دون إنشاء مفتاح بديل أو استبدال المفتاح المحفوظ.
+- Audio/TTS update — 2026-11-06
+  - SaadStudio now registers and routes WaveSpeed `elevenlabs/eleven-v4` and `elevenlabs/eleven-v4-turbo` using the documented fields `text`, `voice_id`, `stability`, and `similarity`; unsupported legacy fields are not sent on these routes.
+  - Sound Studio exposes model selection independently from voice selection and shows Stability/Similarity controls. This does not claim provider-backed voice library discovery or official voice cloning; both remain follow-up work pending verified provider contracts.
+  - Validation was blocked by the known Windows Codex Temp rename `EPERM`; no paid or production request was executed.
+- P0 WaveSpeed ElevenLabs verification — 2026-11-06
+  - Official WaveSpeed documentation confirms the V4 and V4 Turbo request contract: `text`, `voice_id`, `stability`, and `similarity`; both support 1–10,000 characters, inline audio tags, and MP3 output. The attached DOCX matches this contract.
+  - The official WaveSpeed Voice ID page lists 66 usable names, including Alicia, and allows direct ElevenLabs Voice IDs. It documents no voice-cloning creation endpoint; SaadStudio therefore must not present local file storage or a custom ID as cloning success.
+  - SaadStudio records the documented names as provider-compatible IDs, filters them by model through `/api/voices?model=...`, and keeps Gemini records separate. V4/Turbo credit rates use the existing SaadStudio margin formula.
+  - Validation status: model registry 11/11 passed with project-local Temp/TMP; audio suite retains a cloning-pricing assertion failure; TypeScript and build remained blocked by bounded Windows execution. No paid or production operation was performed.
+- P0 WaveSpeed tests — 2026-11-06
+  - Legacy Voice Cloning is now explicitly separate from ElevenLabs TTS: the old `minimax/voice-clone` operation keeps its flat 89.6-credit charge; V4/Turbo use character pricing from their documented WaveSpeed rates.
+  - The audio-focused acceptance set passes 6 files / 37 tests. WaveSpeed's official Voice ID source currently enumerates 64 names, so the implementation does not fabricate a 65th or 66th name.
+  - Full TypeScript did not finish in the bounded Windows run. Production build failed at filesystem output creation with `EPERM`, and the isolated output-dir run also hit offline Google Fonts resolution. Deployment remains blocked pending clean verification and explicit approval.
+- P0 Windows build verification — 2026-11-06
+  - Full TypeScript now passes: 4,618 files, exit 0, 72.24s, ~2.09GB compiler memory. The fixed error was the missing `similarity` field in the audio request contract.
+  - Production build passes outside the sandbox: exit 0 in 240.96s, all routes compiled and Next type validity checked. The sandbox-only failure was `EPERM` creating generated `.next` route directories.
+  - Removed temporary/unsafe build settings: no `ignoreBuildErrors` and no diagnostic `distDir` remain. External `next/font/google` build downloads were replaced with local CSS fallbacks after DNS failure to `fonts.googleapis.com`.
+  - Audio regression suite remains 37/37. No paid or production operation was performed; deployment still requires explicit approval.
+- P0 Deploy Manager / GitHub Actions — 2026-11-06
+  - The latest observed GitHub run (`42013284172`) stopped in `validate` before tests or server deployment; step logs are unavailable with the current repository permission. No rerun or production dispatch was performed.
+  - The Deploy Manager production buttons now dispatch the repository `deploy.yml` through GitHub Actions and select rollback from a previous successful workflow SHA. Direct SSH code remains for read-only diagnostics/backward compatibility, not the production button path.
+  - The current public health endpoint returned HTTP 200 with database and ffmpeg healthy. Contabo root/Docker state, production backup integrity, and environment Secret names remain unverified without configured manager credentials; the release is therefore not approved for production.
+  - Fresh verification: Deploy Manager 15/15, audio 37/37, TypeScript exit 0 (73.48s), production build exit 0 (271.88s). No workflow dispatch, paid request, production deployment, backup mutation, rollback, or force push occurred.
+- P0 Deploy Manager path correction — 2026-11-07
+  - Direct SSH is the default production path again; GitHub Actions remains a secondary option. The unpublished release commit was amended locally to remove the accidental change that made Workflow dispatch primary. No server or backup operation was performed.

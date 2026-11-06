@@ -95,6 +95,8 @@ export function VoiceLibraryModal({
   const handlePlayPreview = (e: React.MouseEvent, voice: VoiceDefinition) => {
     e.stopPropagation();
 
+    if (!voice.sampleUrl) return;
+
     if (playingVoiceId === voice.id) {
       audioRef.current?.pause();
       setPlayingVoiceId(null);
@@ -130,36 +132,8 @@ export function VoiceLibraryModal({
 
   const handleCreateClone = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cloneName.trim()) return;
-
-    setIsCloning(true);
-    setTimeout(() => {
-      const newCloned: VoiceDefinition = {
-        id: `custom-${Date.now()}`,
-        name: cloneName.trim(),
-        avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-        language: cloneLanguage,
-        accent: `${cloneLanguage} · Custom Cloned Voice`,
-        gender: cloneGender,
-        category: "conversational",
-        tag: "CHAT",
-        tagColor: "teal",
-        sampleUrl: "/api/voice-sample?voice=Charon&lang=ar",
-        provider: "custom",
-        isCloned: true,
-      };
-
-      const updated = [newCloned, ...myVoices];
-      setMyVoices(updated);
-      try {
-        localStorage.setItem("saad_studio_custom_voices", JSON.stringify(updated));
-      } catch {}
-
-      setIsCloning(false);
-      setShowCloneModal(false);
-      setCloneName("");
-      setActiveTab("my_voices");
-    }, 600);
+    setIsCloning(false);
+    window.alert("WaveSpeedAI documents Voice ID usage, but no official voice-cloning endpoint is available in the approved integration.");
   };
 
   // Filtered Voices list

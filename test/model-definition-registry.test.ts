@@ -269,7 +269,7 @@ describe("central model definition registry", () => {
     expect(lipsyncModels[0].id).toBe("sync-lipsync-3");
 
     const ttsModels = getCentralizedDynamicTTSModels();
-    expect(ttsModels.length).toBe(5);
+    expect(ttsModels.length).toBe(7);
     expect(ttsModels.some((m) => m.id === "elevenlabs/text-to-speech-multilingual-v2")).toBe(true);
     expect(ttsModels.some((m) => m.id === "gemini-3.1-flash-tts-preview")).toBe(true);
   });
@@ -295,7 +295,7 @@ describe("central model definition registry", () => {
   });
 
   it("propagates TTS definition changes (display name, voices, defaultVoice) directly to TTS consumers", () => {
-    const rawTTS = CURATED_TTS_MODELS[1]; // Gemini 3.1 Flash Live
+    const rawTTS = CURATED_TTS_MODELS.find((model) => model.id === "gemini-3.1-flash-tts-preview")!;
     const [definition] = buildCentralModelDefinitions({ ttsModels: [rawTTS] });
 
     const changedDef: CentralModelDefinition = {

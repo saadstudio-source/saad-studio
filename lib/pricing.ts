@@ -1294,9 +1294,14 @@ export function countAudioScriptCharacters(text?: string | null): number {
  * Credits = max(1, ceil(characterCount * 0.0034))
  * Benchmark: ~1 CR per 294 chars ($0.00017 / char target value). Minimum 1 CR.
  */
-export function calculateTtsCredits(textOrCount?: string | number | null): number {
+export function calculateTtsCredits(textOrCount?: string | number | null, model?: string | null): number {
   const count = typeof textOrCount === "number" ? textOrCount : countAudioScriptCharacters(textOrCount);
   if (count <= 0) return 1;
+  const normalizedModel = String(model || "").trim().toLowerCase();
+  // WaveSpeed source rates: V4=$0.08/1k and Turbo=$0.04/1k. Apply the
+  // existing 1.4 margin and 40 credits/USD conversion for these routes.
+  if (normalizedModel === "elevenlabs/eleven-v4") return Math.max(1, Math.ceil(count * 0.00448));
+  if (normalizedModel === "elevenlabs/eleven-v4-turbo") return Math.max(1, Math.ceil(count * 0.00224));
   return Math.max(1, Math.ceil(count * 0.0034));
 }
 

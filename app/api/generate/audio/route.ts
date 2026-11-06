@@ -85,9 +85,11 @@ interface AudioRequestBody {
   actionType: "tts" | "video2audio" | "music" | "speech-to-text" | "audio-isolation" | "voice-changer" | "dubbing" | "lip-sync" | "voice-cloning";
   text?: string;
   voice?: string;
+  voice_id?: string;
   speed?: number;
   emotion?: string;
   stability?: number;
+  similarity?: number;
   clarity?: number;
   use_speaker_boost?: boolean;
   videoUrl?: string;
@@ -239,6 +241,8 @@ function looksLikeKieModel(model?: string): boolean {
 function resolveWaveSpeedTtsModel(model?: string): string {
   if (!model) return WS_TTS_MODEL;
   const normalized = model.trim().toLowerCase();
+  if (normalized === "elevenlabs/eleven-v4") return "elevenlabs/eleven-v4";
+  if (normalized === "elevenlabs/eleven-v4-turbo") return "elevenlabs/eleven-v4-turbo";
   if (normalized === "elevenlabs/eleven-v3" || normalized === "eleven_v3") return "elevenlabs/eleven-v3";
   if (normalized === "elevenlabs/multilingual-v2" || normalized === "eleven_multilingual_v2") return "elevenlabs/multilingual-v2";
   return WS_TTS_MODEL;
@@ -367,11 +371,14 @@ async function buildAudioChargeQuote(actionType: AudioRequestBody["actionType"],
   const quality = resolveQuoteQuality(actionType, body);
   const units = resolveQuoteUnits(actionType, durationSec);
 
-  // Canonical Character-Based TTS Pricing (applies to Built-in TTS and Cloned Voice TTS)
+  // Built-in TTS is character-priced. Legacy Voice Cloning is a separate
+  // minimax/voice-clone operation with its own flat provider charge.
   if (actionType === "tts" || actionType === "voice-cloning") {
     const text = body.text || body.prompt || "";
     const charCount = countAudioScriptCharacters(text);
-    const finalCredits = calculateTtsCredits(charCount);
+    const finalCredits = actionType === "voice-cloning"
+      ? getAudioActionCredits("voice-cloning", text)
+      : calculateTtsCredits(charCount, body.model);
     return {
       chargeModelRef,
       durationSec,
@@ -381,7 +388,7 @@ async function buildAudioChargeQuote(actionType: AudioRequestBody["actionType"],
         sourceCredits: finalCredits,
         marginPercent: 0,
         finalCredits,
-        pricingSource: "tts-character-pricing",
+        pricingSource: actionType === "voice-cloning" ? "legacy-voice-clone-flat-pricing" : "tts-character-pricing",
         characterCount: charCount,
       },
     };
@@ -1128,6 +1135,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    if ((body.model === "elevenlabs/eleven-v4" || body.model === "elevenlabs/eleven-v4-turbo") && (body.text?.length ?? 0) > 10000) {
+      return NextResponse.json({ error: "ElevenLabs V4 text is limited to 10,000 characters." }, { status: 400 });
+    }
 
     if (actionType === "video2audio" && !body.videoUrl?.trim()) {
       return NextResponse.json(
@@ -1402,7 +1412,7 @@ export async function POST(req: NextRequest) {
 
     if (actionType === "tts") {
       const { text, voice = "Aria" } = body;
-      const safeText = sanitizePrompt(text ?? "", 5000);
+      const safeText = sanitizePrompt(text ?? "", 10000);
       if (isGeminiTtsModelSupported(body.model)) {
         if (!googleKey) {
           const responseJson = { error: "Gemini audio provider is not configured.", code: "google_key_missing" };
@@ -1437,6 +1447,7 @@ export async function POST(req: NextRequest) {
       }
 
       const wsModel = resolveWaveSpeedTtsModel(body.model);
+      const isElevenV4 = wsModel === "elevenlabs/eleven-v4" || wsModel === "elevenlabs/eleven-v4-turbo";
       const providerOrder = [
         hasActiveKie(kieKey) && isKieTtsModelSupported(body.model) ? "kie" : null,
         hasActiveWaveSpeedFallback(wavespeedKey) ? "wavespeed" : null,
@@ -1450,7 +1461,12 @@ export async function POST(req: NextRequest) {
               ? (await markProviderDispatched(), await runKieAudio(body, kieKey!))
               : (await markProviderDispatched(), await runWaveSpeed(
                   wsModel,
-                  {
+                  isElevenV4 ? {
+                    text: safeText,
+                    voice_id: voice || "Alicia",
+                    stability: Math.max(0, Math.min(1, Number(body.stability ?? 0.5))),
+                    similarity: Math.max(0, Math.min(1, Number(body.similarity ?? (Number(body.clarity ?? 75) / 100)))),
+                  } : {
                     text: safeText,
                     voice_id: voice,
                     similarity: Math.max(0, Math.min(1, Number(body.clarity ?? 75) / 100)),
@@ -1624,7 +1640,7 @@ export async function POST(req: NextRequest) {
         throw new Error("WaveSpeed API key is required for voice changer.");
       }
 
-      const voiceId = body.voice?.trim() || "pNInz6obpgDQGcFmaJgB";
+      const voiceId = (body.voice_id ?? body.voice)?.trim() || "Alicia";
       const normalizedAudioUrl = body.audioUrl!.startsWith("data:")
         ? await uploadDataUrlToWaveSpeed(body.audioUrl!, wavespeedKey!)
         : body.audioUrl!;

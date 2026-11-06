@@ -3,7 +3,6 @@
 // Trigger Vercel build: settings sidebar integrated directly
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { Caveat } from "next/font/google";
 import { confirmAction } from "@/lib/confirm-action";
 import { SaadLoader } from "@/components/saad-loader";
 import {
@@ -42,7 +41,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useGenerationGate } from "@/hooks/use-generation-gate";
 import { AssetInspector, type Asset } from "@/components/AssetInspector";
 
-const caveat = Caveat({ subsets: ["latin"], variable: "--font-handwritten", display: "swap" });
+const caveat = { variable: "font-handwritten" };
 
 const STORYBOARD_TYPES = [
   { id: "production", label: "Storyboard Production" },
