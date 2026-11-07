@@ -1155,6 +1155,9 @@ body{
             <option value="elevenlabs/eleven-v4">ElevenLabs Eleven V4 · expressive</option>
             <option value="elevenlabs/eleven-v4-turbo">ElevenLabs Eleven V4 Turbo · fast</option>
             <option value="elevenlabs/text-to-speech-multilingual-v2">ElevenLabs Multilingual v2 · legacy</option>
+            <option value="gemini-3.1-flash-tts-preview">Google Gemini 3.1 Flash TTS · preview</option>
+            <option value="gemini-2.5-flash-preview-tts">Google Gemini 2.5 Flash TTS · preview</option>
+            <option value="gemini-2.5-pro-preview-tts">Google Gemini 2.5 Pro TTS · preview</option>
           </select>
           <div id="ttsModelHint" style="font-size:10px;color:var(--text-sec);margin-top:5px">10,000 characters · MP3 · audio tags supported</div>
         </div>
@@ -1640,6 +1643,7 @@ function saveVmPreviewCache(){try{localStorage.setItem(VPM_CACHE_KEY,JSON.string
 
 function isElevenTtsModel(model){return String(model||'').toLowerCase().startsWith('elevenlabs/');}
 function isGeminiVoiceId(id){return String(id||'').toLowerCase().startsWith('gemini:');}
+function isGeminiTtsModel(model){return String(model||'').toLowerCase().startsWith('gemini-') && String(model||'').toLowerCase().includes('tts');}
 function getModelVoiceCatalog(){
   const model=getTtsModel();
   // The selected provider is authoritative: Gemini voices never appear in
@@ -2436,14 +2440,14 @@ function updateElevenSettingLabels(){
 function onTtsModelChange(select){
   const model=select?.value||getTtsModel();
   // A voice selected for another provider cannot be sent to this model.
-  if(isElevenTtsModel(model) && isGeminiVoiceId(_vmSelectedId)){
+  if(isElevenTtsModel(model) && isGeminiVoiceId(_vmSelectedId) || isGeminiTtsModel(model) && !isGeminiVoiceId(_vmSelectedId)){
     const first=getModelVoiceCatalog()[0];
     if(first){_vmSelectedId=first.id;setVoiceChipAvatar(first.id,first.gender,first.color);}
   }
   renderVmGrid();
   const isLegacy=select.value==='elevenlabs/text-to-speech-multilingual-v2';
   document.getElementById('ttsModelHint').textContent=isLegacy?'Legacy multilingual endpoint · MP3':'10,000 characters · MP3 · audio tags supported';
-  document.getElementById('elevenVoiceSettings').style.display='';
+  document.getElementById('elevenVoiceSettings').style.display=isGeminiTtsModel(model)?'none':'';
   scheduleAudioQuote();
 }
 function setCreditCostLabel(text,tone){
@@ -2783,7 +2787,7 @@ async function generateVoice(text){
       const selectedTtsModel=getTtsModel();
       const isElevenV4=selectedTtsModel==='elevenlabs/eleven-v4'||selectedTtsModel==='elevenlabs/eleven-v4-turbo';
       const body=isGeminiVoiceId(voiceId)
-        ? {actionType:'tts',model:getGeminiTtsModel(),text,voice:voiceId.replace(/^gemini:/,''),speed:Math.max(0.7,Math.min(1.5,speed)),style:voiceStyle,language_code:lc||'ar'}
+        ? {actionType:'tts',model:isGeminiTtsModel(selectedTtsModel)?selectedTtsModel:getGeminiTtsModel(),text,voice:voiceId.replace(/^gemini:/,''),speed:Math.max(0.7,Math.min(1.5,speed)),style:voiceStyle,language_code:lc||'ar'}
         : isElevenV4
           ? {actionType:'tts',model:selectedTtsModel,text,voice_id:voiceId,stability:Number(document.getElementById('stabilitySlider')?.value||0.5),similarity:Number(document.getElementById('similaritySlider')?.value||0.75)}
           : {actionType:'tts',model:selectedTtsModel,text,voice:voiceId,speed:Math.max(0.7,Math.min(1.5,speed)),style:voiceStyle,stability:0.5,clarity:75,use_speaker_boost:true};
