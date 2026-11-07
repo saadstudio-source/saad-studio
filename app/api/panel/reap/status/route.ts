@@ -21,38 +21,47 @@ import prismadb from "@/lib/prismadb";
 import { pollReapStatus } from "@/lib/providers/reap";
 import { persistProviderUrl } from "@/lib/providers/persist-output";
 import { normalizeMediaUrl } from "@/lib/storage";
+import { classifyReapGeneration, type ReapAccess } from "@/lib/panel-reap-access";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Ownership gate: a caller may only poll (and have outputs persisted for) a Reap
- * project that belongs to one of THEIR generations. Without this, any signed-in
- * user who learned someone else's generationId could overwrite that row's media
- * URL, and any projectId could be pulled into their own storage.
+ * Ownership gate (decision logic: lib/panel-reap-access.ts): a caller may only
+ * poll — and have outputs persisted for — a Reap project that belongs to one of
+ * THEIR own Reap generations. Finished rows are answered from the database and
+ * never trigger a Reap call, so a finished generation cannot be used to pull an
+ * arbitrary projectId into the caller's storage.
  *
- *  - generationId given: the row must be the caller's own Reap generation, and
- *    while it is still in flight its task marker must be this projectId.
+ *  - generationId given: classify that row (must be the caller's own).
  *  - generationId omitted (older panel builds): the project must still be an
  *    in-flight job owned by the caller.
  */
-async function ownsReapProject(userId: string, projectId: string, generationId: string | null): Promise<boolean> {
-  const marker = `task:reap:${projectId}`;
-
+async function resolveReapAccess(userId: string, projectId: string, generationId: string | null): Promise<ReapAccess> {
   if (generationId) {
     const generation = await prismadb.generation.findFirst({
       where: { id: generationId, userId },
-      select: { mediaUrl: true, modelUsed: true },
+      select: { id: true, mediaUrl: true, modelUsed: true },
     });
-    if (!generation || !String(generation.modelUsed ?? "").startsWith("reap:")) return false;
-    if (generation.mediaUrl?.startsWith("task:") && generation.mediaUrl !== marker) return false;
-    return true;
+    if (!generation) return { access: "denied" };
+
+    let usageRequestId: string | null = null;
+    if (!String(generation.mediaUrl ?? "").trim()) {
+      const usage = await prismadb.providerUsageRecord
+        .findFirst({ where: { generationId: generation.id }, select: { providerRequestId: true } })
+        .catch(() => null);
+      usageRequestId = usage?.providerRequestId ?? null;
+    }
+    return classifyReapGeneration(
+      { modelUsed: generation.modelUsed, mediaUrl: generation.mediaUrl, usageRequestId },
+      projectId,
+    );
   }
 
   const inFlight = await prismadb.generation.findFirst({
-    where: { userId, mediaUrl: marker },
+    where: { userId, mediaUrl: `task:reap:${projectId}` },
     select: { id: true },
   });
-  return Boolean(inFlight);
+  return inFlight ? { access: "poll" } : { access: "denied" };
 }
 
 export async function GET(req: NextRequest) {
@@ -77,8 +86,17 @@ export async function GET(req: NextRequest) {
     const userId = verified.userId;
     await ensureUserRow(userId);
 
-    if (!(await ownsReapProject(userId, projectId, generationId))) {
+    const access = await resolveReapAccess(userId, projectId, generationId);
+    if (access.access === "denied") {
       return NextResponse.json({ error: "Job not found." }, { status: 404 });
+    }
+    if (access.access === "failed") {
+      return NextResponse.json({ status: "failed", error: "Job failed." });
+    }
+    if (access.access === "completed") {
+      // Already finished and stored: answer from the database, do not call Reap.
+      const stored = normalizeMediaUrl(access.url);
+      return NextResponse.json({ status: "completed", url: stored, urls: stored ? [stored] : [] });
     }
 
     const result = await pollReapStatus(projectId);
