@@ -4,19 +4,30 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  Activity,
   ArrowUpRight,
+  Coins,
   Command,
   ExternalLink,
+  Film,
+  Gauge,
   Globe2,
   Image as ImageIcon,
   Images,
+  Languages,
   Layers,
   Layers3,
   MessageCircle,
+  Mic,
+  Music,
   PlaySquare,
   ShieldCheck,
   Sparkles,
   Terminal,
+  Trash2,
+  Type,
+  Upload,
+  User,
   Wrench,
   X,
 } from "lucide-react";
@@ -69,14 +80,49 @@ const HERO_TARGET: Record<ClientTabId, string> = {
   other: "your agent",
 };
 
-// Mirrors the tools actually wired in app/api/smart-cli/mcp/route.ts.
-const TOOLS = [
-  { icon: ImageIcon, title: "generate_image", text: "Generate an image from a prompt, with model, aspect ratio and resolution control." },
-  { icon: Layers, title: "generate_storyboard", text: "Return several concept variations from one idea so you can pick before rendering." },
-  { icon: PlaySquare, title: "generate_video", text: "Render a video from a prompt, optionally using a chosen concept as the first frame." },
-  { icon: Images, title: "show_generations", text: "List recent images and videos so a previous frame can be reused or reviewed." },
-  { icon: Layers3, title: "list_models", text: "Return the available image and video models with their capabilities." },
+// Mirrors the tools actually wired in app/api/smart-cli/mcp/route.ts and
+// lib/smart-cli-extra-tools.ts (same grouping Claude shows in Tool permissions).
+// If you add or remove a tool there, update this list.
+const TOOL_GROUPS = [
+  {
+    title: "Create",
+    note: "Spend credits — Claude asks for your approval first.",
+    tools: [
+      { icon: ImageIcon, title: "generate_image", text: "Generate an image with model, aspect ratio and resolution control." },
+      { icon: Layers, title: "generate_storyboard", text: "Several concept variations from one idea, to pick before rendering." },
+      { icon: PlaySquare, title: "generate_video", text: "Render a video from a prompt, optionally from a chosen first frame." },
+      { icon: Music, title: "generate_music", text: "Generate a music track (30 s clip or up to 5 min), with or without vocals." },
+      { icon: Mic, title: "text_to_speech", text: "Turn a script into multilingual speech with a choice of voices." },
+      { icon: Film, title: "post_produce_video", text: "Captions, reframe, dubbing, transcription or auto-clips on an existing video." },
+    ],
+  },
+  {
+    title: "Read-only",
+    note: "Never spend credits or change anything.",
+    tools: [
+      { icon: Layers3, title: "list_models", text: "Available image and video models with their capabilities." },
+      { icon: Images, title: "show_generations", text: "Your recent images, videos and audio, to reuse or review." },
+      { icon: Coins, title: "check_balance", text: "Your current credit balance." },
+      { icon: User, title: "get_account", text: "Name, balance and subscription status." },
+      { icon: Gauge, title: "quote_generation", text: "Exact credit price of an image or video before you generate it." },
+      { icon: Activity, title: "get_job_status", text: "Progress and result of a generation by id." },
+      { icon: Activity, title: "get_post_production_status", text: "Progress and final file of a post-production job." },
+      { icon: Languages, title: "list_dubbing_languages", text: "Languages a video can be dubbed into." },
+      { icon: Languages, title: "list_translation_languages", text: "Languages supported for caption and transcript translation." },
+      { icon: Type, title: "list_caption_presets", text: "Caption styles available for post-production." },
+    ],
+  },
+  {
+    title: "Files & cleanup",
+    note: "Upload local files; delete only when you explicitly ask.",
+    tools: [
+      { icon: Upload, title: "create_upload_url", text: "One-time signed URL to upload a local image, video or audio file." },
+      { icon: Trash2, title: "delete_generation", text: "Permanently delete one of your generations by id." },
+    ],
+  },
 ];
+
+const TOOL_COUNT = TOOL_GROUPS.reduce((total, group) => total + group.tools.length, 0);
 
 // "Try in …" deep links only exist where a prompt can be pre-filled in a web chat.
 function getTryLink(tab: ClientTabId, prompt: string): { href: string; label: string } | null {
@@ -569,21 +615,32 @@ export default function SmartCliHub() {
             <h2 className="text-2xl font-black">Connector tools</h2>
           </div>
           <p className="mb-5 text-sm text-slate-400">
-            Tool calls debit credits from your account the same way the website does. Only these {TOOLS.length} tools are exposed — nothing else. Revoke access from Claude any time.
+            Tool calls debit credits from your account the same way the website does. Only these {TOOL_COUNT} tools are exposed — nothing else. Revoke access from Claude any time.
           </p>
-          <div className="grid gap-4 md:grid-cols-3">
-            {TOOLS.map((tool) => {
-              const Icon = tool.icon;
-              return (
-                <div key={tool.title} className="rounded-lg border border-white/10 bg-[#0c111b] p-5">
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-cyan-300/10 text-cyan-200">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <h3 className="font-mono text-sm font-bold text-white">{tool.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">{tool.text}</p>
+          <div className="space-y-8">
+            {TOOL_GROUPS.map((group) => (
+              <div key={group.title}>
+                <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <h3 className="text-lg font-black text-white">{group.title}</h3>
+                  <span className="rounded-md bg-white/10 px-2 py-0.5 text-xs text-slate-300">{group.tools.length}</span>
+                  <span className="text-sm text-slate-500">{group.note}</span>
                 </div>
-              );
-            })}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {group.tools.map((tool) => {
+                    const Icon = tool.icon;
+                    return (
+                      <div key={tool.title} className="rounded-lg border border-white/10 bg-[#0c111b] p-5">
+                        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-cyan-300/10 text-cyan-200">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <h4 className="font-mono text-sm font-bold text-white">{tool.title}</h4>
+                        <p className="mt-2 text-sm leading-6 text-slate-400">{tool.text}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       </main>

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { verifyPanelToken } from "@/lib/panel-auth";
 import { getFallbackUrls } from "@/lib/utils";
 import { getInternalBaseUrl, getPublicOrigin, SMART_CLI_CANONICAL_ORIGIN } from "@/lib/smart-cli-origin";
+import { callExtraTool, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, EXTRA_TOOLS } from "@/lib/smart-cli-extra-tools";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,8 +40,6 @@ type ToolResult = {
   structuredContent?: Record<string, unknown>;
 };
 
-const DEFAULT_IMAGE_MODEL = "nano-banana-pro";
-const DEFAULT_VIDEO_MODEL = "kling-3.0/video";
 
 // MCP Apps UI resource URIs — the widgets that Claude renders inline when
 // these tools return. See https://apps.extensions.modelcontextprotocol.io/.
@@ -57,9 +56,31 @@ const VIDEO_TOOL_UI_META = {
   "ui/resourceUri": VIDEO_VIEW_URI,
 } as const;
 
-const tools = [
+// MCP tool annotations (spec: ToolAnnotations). Claude uses them to group the
+// connector's tools in Settings → Connectors → Tool permissions:
+//   readOnlyHint: true  → "Read-only tools"  (safe to allow without asking)
+//   readOnlyHint: false → "Write/delete tools" (asks for approval by default)
+// Without them every tool lands in "Other tools" with one blanket permission.
+//
+// Generation tools spend the user's credits, so they stay write-class (approval
+// by default) but are marked non-destructive: they only add new media.
+const GENERATE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+} as const;
+
+const READ_ONLY_ANNOTATIONS = {
+  readOnlyHint: true,
+  openWorldHint: false,
+} as const;
+
+const CORE_TOOLS = [
   {
     name: "generate_image",
+    title: "Generate image",
+    annotations: { title: "Generate image", ...GENERATE_ANNOTATIONS },
     description: "Generate an image through Saad Studio using Nano Banana Pro by default.",
     inputSchema: {
       type: "object",
@@ -77,6 +98,8 @@ const tools = [
   },
   {
     name: "generate_storyboard",
+    title: "Generate storyboard",
+    annotations: { title: "Generate storyboard", ...GENERATE_ANNOTATIONS },
     description:
       "Generate multiple concept variations (storyboard candidates) from a single idea. Returns N image options the user can pick from before rendering a video.",
     inputSchema: {
@@ -99,6 +122,8 @@ const tools = [
   },
   {
     name: "generate_video",
+    title: "Generate video",
+    annotations: { title: "Generate video", ...GENERATE_ANNOTATIONS },
     description:
       "Render a video from a prompt. Optionally pass imageUrl (a concept from generate_storyboard or from show_generations) to do image-to-video.",
     inputSchema: {
@@ -116,6 +141,8 @@ const tools = [
   },
   {
     name: "show_generations",
+    title: "Show generations",
+    annotations: { title: "Show generations", ...READ_ONLY_ANNOTATIONS },
     description:
       "List the most recent images/videos the user generated. Returns public URLs so Claude can reference an earlier image (e.g. as first frame for a new video via generate_video's imageUrl) or show the user their history.",
     inputSchema: {
@@ -132,6 +159,8 @@ const tools = [
   },
   {
     name: "list_models",
+    title: "List models",
+    annotations: { title: "List models", ...READ_ONLY_ANNOTATIONS },
     description:
       "List the image and video models available on Saad Studio, with their capabilities. Use before generate_image/generate_video when the user asks for a specific look, quality tier, or a named model.",
     inputSchema: {
@@ -146,6 +175,8 @@ const tools = [
     },
   },
 ];
+
+const tools = [...CORE_TOOLS, ...EXTRA_TOOLS];
 
 const AVAILABLE_MODELS = [
   { id: "nano-banana-pro", kind: "image", label: "Nano Banana Pro", notes: "Default. Professional 4K asset production.", badges: ["default", "pro"] },
@@ -887,8 +918,16 @@ async function dispatchTool(
       return callShowGenerations(request, args, token);
     case "list_models":
       return callListModels(args);
-    default:
-      return toolResult({ error: `Unknown tool: ${name}` }, true);
+    default: {
+      // Account / status / audio / post-production / upload tools live in
+      // lib/smart-cli-extra-tools.ts and share this panelFetch + token.
+      const extra = await callExtraTool(
+        name,
+        args,
+        (path, init) => panelFetch(request, path, init ?? {}, token),
+      );
+      return extra ?? toolResult({ error: `Unknown tool: ${name}` }, true);
+    }
   }
 }
 

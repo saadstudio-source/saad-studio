@@ -5,7 +5,7 @@
 //
 // Presets only describe workflows built from the tools that are really wired in
 // app/api/smart-cli/mcp/route.ts. If you add or remove a tool there, update the
-// TOOL_NAMES list and the presets below.
+// tool lists and the presets below.
 
 export const SMART_CLI_MCP_URL = "https://saadstudio.app/api/smart-cli/mcp";
 export const SMART_CLI_CONNECTOR_NAME = "Saad Studio";
@@ -207,7 +207,10 @@ export interface SmartCliPreset {
   related: string[];
 }
 
-export const TOOL_NAMES = [
+// Core tools live in app/api/smart-cli/mcp/route.ts; the rest in
+// lib/smart-cli-extra-tools.ts. test/smart-cli-extra-tools.test.ts checks that
+// every preset only references names from this list.
+export const CORE_TOOL_NAMES = [
   "generate_image",
   "generate_storyboard",
   "generate_video",
