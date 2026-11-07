@@ -1622,7 +1622,9 @@ const MY_VOICES_KEY='ff_my_voices_v1';
 const VPM_FAV_KEY='ff_vpm_favs_v1';
 const VPM_CACHE_KEY='ff_vpm_cache_v2';
 let _vmFavs=new Set(JSON.parse(localStorage.getItem(VPM_FAV_KEY)||'[]'));
-let _vmSelectedId='gemini:Sulafat';
+// The default model selector is ElevenLabs, so its initial voice must come
+// from the same provider. Gemini voices are selected only in Gemini mode.
+let _vmSelectedId='21m00Tcm4TlvDq8ikWAM';
 let _vmActiveCat='All';
 let _vmActiveTab='all';
 let _vmGenderFilter='';
@@ -1636,6 +1638,14 @@ function saveMyVoices(l){localStorage.setItem(MY_VOICES_KEY,JSON.stringify(l));}
 function saveVmFavs(){localStorage.setItem(VPM_FAV_KEY,JSON.stringify([..._vmFavs]));}
 function saveVmPreviewCache(){try{localStorage.setItem(VPM_CACHE_KEY,JSON.stringify(_vmPreviewCache));}catch{}}
 
+function isElevenTtsModel(model){return String(model||'').toLowerCase().startsWith('elevenlabs/');}
+function isGeminiVoiceId(id){return String(id||'').toLowerCase().startsWith('gemini:');}
+function getModelVoiceCatalog(){
+  const model=getTtsModel();
+  // The selected provider is authoritative: Gemini voices never appear in
+  // the WaveSpeedAI ElevenLabs picker, and vice versa.
+  return VOICE_CATALOG.filter(v=>isElevenTtsModel(model)?v.provider!=='gemini':v.provider==='gemini');
+}
 function openVoiceModal(){document.getElementById('voiceOverlay').classList.add('open');renderVmGrid();updateVmFavCount();setTimeout(()=>document.getElementById('vmSearch')?.focus(),100);}
 function closeVoiceModal(){document.getElementById('voiceOverlay').classList.remove('open');_vmPreviewAudio?.pause();_vmPlayingId=null;updateQuickVoiceButtons(null);}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVoiceModal();});
@@ -1815,7 +1825,7 @@ function selectVmPreviewLang(voiceId, langCode, event) {
 function renderVmGrid(){
   const q=(document.getElementById('vmSearch')?.value||'').toLowerCase();
   const myV=loadMyVoices().map(v=>({cat:'My Voices',id:v.id,name:v.name,gender:'custom',lang:'MULTI',accent:'Custom',emoji:'🎤',color:'#2a1a5a',isCustom:true,photoUrl:v.photoUrl||null}));
-  const pool=_vmActiveTab==='my'?myV:[...myV,...VOICE_CATALOG];
+  const pool=_vmActiveTab==='my'?myV:[...myV,...getModelVoiceCatalog()];
   const filtered=pool.filter(v=>{
     if(_vmActiveTab==='fav'&&!_vmFavs.has(v.id))return false;
     if(_vmActiveTab!=='fav'&&_vmActiveCat!=='All'&&v.cat!==_vmActiveCat)return false;
@@ -2424,6 +2434,13 @@ function updateElevenSettingLabels(){
   scheduleAudioQuote();
 }
 function onTtsModelChange(select){
+  const model=select?.value||getTtsModel();
+  // A voice selected for another provider cannot be sent to this model.
+  if(isElevenTtsModel(model) && isGeminiVoiceId(_vmSelectedId)){
+    const first=getModelVoiceCatalog()[0];
+    if(first){_vmSelectedId=first.id;setVoiceChipAvatar(first.id,first.gender,first.color);}
+  }
+  renderVmGrid();
   const isLegacy=select.value==='elevenlabs/text-to-speech-multilingual-v2';
   document.getElementById('ttsModelHint').textContent=isLegacy?'Legacy multilingual endpoint · MP3':'10,000 characters · MP3 · audio tags supported';
   document.getElementById('elevenVoiceSettings').style.display='';
@@ -2719,7 +2736,6 @@ async function resumeActiveAudioJob(){
 /* GENERATE */
 function getSelectedVoiceId(){const c=(document.getElementById('customVoiceId')?.value||'').trim();if(c&&!c.startsWith('sample_')&&!c.startsWith('custom_'))return c;return _vmSelectedId||'21m00Tcm4TlvDq8ikWAM';}
 function getSelectedLangCode(){const v=VOICE_CATALOG.find(x=>x.id===_vmSelectedId);if(v&&v.lang==='AR')return'ar';const btn=document.getElementById('optLang');const t=btn?.childNodes[1]?.textContent?.trim()||'Auto';if(t==='Arabic')return'ar';if(t==='English')return'en';return'';}
-function isGeminiVoiceId(id){return String(id||'').startsWith('gemini:');}
 function makeAudioIdempotencyKey(actionType){const uuid=(window.crypto&&typeof window.crypto.randomUUID==='function')?window.crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;return `sound-${actionType||'audio'}-${uuid}`;}
 function postAudioGeneration(body){return fetch('/api/generate/audio',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':makeAudioIdempotencyKey(body&&body.actionType)},body:JSON.stringify(body)});}
 async function handleGenerate(){const text=(document.getElementById('promptInput')?.value||'').trim();if(!text){setStatus('Please enter a description or text.','warn');return;}if(currentMode==='voice')await generateVoice(text);else if(currentMode==='music')await generateMusic(text);else await generateSfx(text);}
