@@ -1,6 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from "next/server";
 import { getAllowedOrigins } from "@/lib/security";
+import { getPublicOrigin } from "@/lib/smart-cli-origin";
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -204,7 +205,7 @@ function isLocalOnlyVideoRoute(pathname: string) {
 }
 
 function smartCliOAuthMetadata(req: Request) {
-  const origin = new URL(req.url).origin;
+  const origin = getPublicOrigin(req);
   return NextResponse.json({
     issuer: origin,
     authorization_endpoint: `${origin}/smart-cli/authorize`,
@@ -225,7 +226,7 @@ function smartCliOAuthMetadata(req: Request) {
 }
 
 function smartCliProtectedResourceMetadata(req: Request) {
-  const origin = new URL(req.url).origin;
+  const origin = getPublicOrigin(req);
   return NextResponse.json({
     resource: `${origin}/api/smart-cli/mcp`,
     authorization_servers: [origin],

@@ -6,6 +6,8 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { Check, LockKeyhole, X } from "lucide-react";
 
+import { parseAllowedRedirectUri } from "@/lib/smart-cli-redirect";
+
 function AuthorizeContent() {
   const searchParams = useSearchParams();
   const { isLoaded, isSignedIn } = useAuth();
@@ -19,11 +21,11 @@ function AuthorizeContent() {
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? "your Saad Studio account";
 
   async function deny() {
-    if (!redirectUri) {
-      setError("Missing redirect URI.");
+    const url = parseAllowedRedirectUri(redirectUri);
+    if (!url) {
+      setError("Missing or unsupported redirect URI.");
       return;
     }
-    const url = new URL(redirectUri);
     url.searchParams.set("error", "access_denied");
     if (params.state) url.searchParams.set("state", params.state);
     window.location.href = url.toString();

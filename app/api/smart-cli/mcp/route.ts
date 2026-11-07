@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { verifyPanelToken } from "@/lib/panel-auth";
 import { getFallbackUrls } from "@/lib/utils";
+import { getInternalBaseUrl, getPublicOrigin, SMART_CLI_CANONICAL_ORIGIN } from "@/lib/smart-cli-origin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -209,7 +210,7 @@ const IMAGE_WIDGET_HTML = String.raw`<!DOCTYPE html>
 <body>
 <div class="card" id="root"><div class="empty">Loading…</div></div>
 <script type="module">
-  import { App } from "https://www.saadstudio.app/mcp-ext-apps-0.4.0.js";
+  import { App } from "https://saadstudio.app/mcp-ext-apps-0.4.0.js";
   const app = new App({ name: "Saad Studio · Image", version: "1.0.0" });
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -285,7 +286,7 @@ const VIDEO_WIDGET_HTML = String.raw`<!DOCTYPE html>
 <body>
 <div class="card" id="root"><div class="empty">Loading…</div></div>
 <script type="module">
-  import { App } from "https://www.saadstudio.app/mcp-ext-apps-0.4.0.js";
+  import { App } from "https://saadstudio.app/mcp-ext-apps-0.4.0.js";
   const app = new App({ name: "Saad Studio · Video", version: "1.0.0" });
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -332,7 +333,7 @@ const UI_RESOURCES = [
     mimeType: "text/html;profile=mcp-app",
     text: IMAGE_WIDGET_HTML,
     _meta: {
-      ui: { csp: { resourceDomains: ["https://www.saadstudio.app"], connectDomains: ["https://www.saadstudio.app"] } },
+      ui: { csp: { resourceDomains: [SMART_CLI_CANONICAL_ORIGIN], connectDomains: [SMART_CLI_CANONICAL_ORIGIN] } },
     },
   },
   {
@@ -342,7 +343,7 @@ const UI_RESOURCES = [
     mimeType: "text/html;profile=mcp-app",
     text: VIDEO_WIDGET_HTML,
     _meta: {
-      ui: { csp: { resourceDomains: ["https://www.saadstudio.app"], connectDomains: ["https://www.saadstudio.app"] } },
+      ui: { csp: { resourceDomains: [SMART_CLI_CANONICAL_ORIGIN], connectDomains: [SMART_CLI_CANONICAL_ORIGIN] } },
     },
   },
 ];
@@ -374,7 +375,7 @@ function withMcpHeaders(response: NextResponse) {
 }
 
 function getOrigin(request: Request) {
-  return new URL(request.url).origin;
+  return getPublicOrigin(request);
 }
 
 function authChallenge(request: Request) {
@@ -588,7 +589,9 @@ async function panelFetch(
   init: RequestInit,
   token: string,
 ): Promise<{ ok: boolean; status: number; data: unknown }> {
-  const url = new URL(path, request.url);
+  // Fixed trusted base: never derive the fetch target (which carries the
+  // Bearer token) from request headers.
+  const url = new URL(path, getInternalBaseUrl());
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !headers.has("Content-Type")) {
@@ -961,6 +964,13 @@ async function handleRpc(body: JsonRpcRequest, request: Request) {
 
 export async function GET(request: Request) {
   if (!hasValidToken(request)) return authChallenge(request);
+  // Streamable HTTP clients probe GET with Accept: text/event-stream to open a
+  // server->client stream. We only answer via POST, so reply 405 as the spec
+  // requires instead of a JSON body the client would try to parse as SSE.
+  const accept = request.headers.get("accept") ?? "";
+  if (accept.includes("text/event-stream") && !accept.includes("application/json")) {
+    return new NextResponse(null, { status: 405, headers: { Allow: "POST", "Cache-Control": "no-store" } });
+  }
   return withMcpHeaders(NextResponse.json({
     name: "Saad Studio Smart CLI",
     description: "MCP-compatible endpoint for Saad Studio creative briefs.",

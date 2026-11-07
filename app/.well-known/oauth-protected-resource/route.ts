@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPublicOrigin } from "@/lib/smart-cli-origin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const origin = new URL(request.url).origin;
+  const origin = getPublicOrigin(request);
 
   return NextResponse.json({
     resource: `${origin}/api/smart-cli/mcp`,

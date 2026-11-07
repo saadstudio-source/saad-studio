@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 // Absolute URLs so any DCR client (Claude Web, Claude Desktop, ChatGPT
 // Apps SDK) can fetch the logo without resolving against its own host.
-const ORIGIN = "https://www.saadstudio.app";
+const ORIGIN = "https://saadstudio.app";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({})) as {

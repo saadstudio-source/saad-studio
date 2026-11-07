@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 import { ensureUserRow } from "@/lib/credit-ledger";
+import { isAllowedRedirectUri } from "@/lib/smart-cli-redirect";
 import { appendOAuthParams, createSmartCliAuthorizationCode } from "@/lib/smart-cli-oauth";
 import { logSmartCliDebug } from "@/lib/smart-cli-debug";
 
@@ -47,21 +48,11 @@ export async function POST(request: NextRequest) {
     return fail("Missing redirect_uri.");
   }
 
-  let parsedRedirect: URL;
-  try {
-    parsedRedirect = new URL(redirectUri);
-  } catch {
+  if (!isAllowedRedirectUri(redirectUri)) {
     const detail = { userId, redirectUri };
-    console.warn("[oauth/approve] invalid redirect_uri", detail);
-    void logSmartCliDebug({ route: "oauth/approve", kind: "invalid_redirect_uri", request, payload: detail });
-    return fail("Invalid redirect_uri.");
-  }
-
-  if (parsedRedirect.protocol !== "https:" && parsedRedirect.hostname !== "localhost") {
-    const detail = { userId, redirectUri };
-    console.warn("[oauth/approve] redirect_uri not HTTPS/localhost", detail);
-    void logSmartCliDebug({ route: "oauth/approve", kind: "redirect_uri_not_https", request, payload: detail });
-    return fail("redirect_uri must use HTTPS or localhost.");
+    console.warn("[oauth/approve] redirect_uri rejected", detail);
+    void logSmartCliDebug({ route: "oauth/approve", kind: "redirect_uri_rejected", request, payload: detail });
+    return fail("redirect_uri must use HTTPS, a loopback address (localhost / 127.0.0.1), or cursor://.");
   }
 
   const issuedTrace = {
