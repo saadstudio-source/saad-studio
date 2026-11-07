@@ -72,7 +72,8 @@ const DRAMA_PIPELINE_STEPS = [
 
 export default function DramaStudioPage() {
   const router = useRouter();
-  const { lang, isRTL } = useLanguage();
+  const { lang } = useLanguage();
+  const isRTL = lang === "ar";
   const [storyIdea, setStoryIdea] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("thriller");
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9">("9:16");

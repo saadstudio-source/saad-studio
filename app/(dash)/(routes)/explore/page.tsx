@@ -933,7 +933,7 @@ function CameraMovementsAd() {
             <div className="relative aspect-video w-full overflow-hidden bg-black">
               <img
                 src={m.imageUrl}
-                alt={m.name}
+                alt={m.nameEn}
                 className="w-full h-full object-cover transition duration-700 group-hover:scale-105"
                 loading="lazy"
               />
@@ -951,7 +951,7 @@ function CameraMovementsAd() {
                   <Camera className="w-2.5 h-2.5 text-amber-400" />
                 </div>
                 <span className="text-xs font-bold text-white truncate group-hover:text-amber-300 transition-colors">
-                  {m.name}
+                  {m.nameEn}
                 </span>
               </div>
               <span className="text-[9px] font-bold text-zinc-500 bg-white/5 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">
