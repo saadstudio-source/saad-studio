@@ -198,6 +198,24 @@ describe("audio tools", () => {
     expect(out).toMatchObject({ status: "succeeded", audioUrl: "https://cdn.example/a.wav" });
   });
 
+  it("audio tools return a branded preview link only when an origin is supplied", async () => {
+    process.env.PANEL_TOKEN_SECRET ??= "test-secret-for-previews";
+    const music = { "POST /api/panel/generate/music": { data: { audioUrl: "https://cdn.example/a.mp3", generationId: "g1", result: { durationSec: 30 } } } };
+
+    const withCtx = mockPanel(music);
+    const a = text(await callExtraTool("generate_music", { prompt: "calm oud" }, withCtx.panel, { previewOrigin: "https://saadstudio.app" }));
+    expect(String(a.previewUrl)).toMatch(/^https:\/\/saadstudio\.app\/preview\/.+\..+/);
+    expect(String(a.presentation)).toContain(String(a.previewUrl));
+
+    const without = mockPanel(music);
+    const b = text(await callExtraTool("generate_music", { prompt: "calm oud" }, without.panel));
+    expect(b.previewUrl ?? null).toBeNull();
+
+    const tts = mockPanel({ "POST /api/panel/generate/tts": { data: { audioUrl: "https://cdn.example/t.mp3", creditsUsed: 1, characterCount: 5, balanceAfter: 9 } } });
+    const c = text(await callExtraTool("text_to_speech", { text: "hello" }, tts.panel, { previewOrigin: "https://saadstudio.app" }));
+    expect(String(c.previewUrl)).toContain("/preview/");
+  });
+
   it("generate_music requires a prompt", async () => {
     const { panel, calls } = mockPanel();
     expect((await callExtraTool("generate_music", { prompt: "  " }, panel))!.isError).toBe(true);

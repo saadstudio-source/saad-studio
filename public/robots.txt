@@ -3,5 +3,6 @@ Allow: /
 Disallow: /admin
 Disallow: /api
 Disallow: /panel
+Disallow: /preview
 
 Sitemap: https://saadstudio.app/sitemap.xml

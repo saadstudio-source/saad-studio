@@ -13,6 +13,7 @@
 // Anything that spends credits is write-class on purpose.
 
 import { getFallbackUrls } from "@/lib/utils";
+import { buildPreviewUrl, type PreviewInput } from "@/lib/smart-cli-preview";
 
 export const DEFAULT_IMAGE_MODEL = "nano-banana-pro";
 export const DEFAULT_VIDEO_MODEL = "kling-3.0/video";
@@ -313,10 +314,20 @@ function pickRecord(value: unknown): Record<string, unknown> {
 
 // ── handlers ───────────────────────────────────────────────────────────────
 
+export interface ExtraToolContext {
+  /** Public site origin used to build branded /preview links. Omit to skip previews. */
+  previewOrigin?: string;
+}
+
+function previewFor(ctx: ExtraToolContext | undefined, input: PreviewInput): string | null {
+  return ctx?.previewOrigin ? buildPreviewUrl(ctx.previewOrigin, input) : null;
+}
+
 export async function callExtraTool(
   name: string,
   args: Record<string, unknown>,
   panel: PanelFetcher,
+  ctx?: ExtraToolContext,
 ): Promise<ExtraToolResult | null> {
   switch (name) {
     case "check_balance": {
@@ -417,12 +428,24 @@ export async function callExtraTool(
       const result = pickRecord(data.result);
       const audioUrl = absoluteUrl(data.audioUrl ?? result.url);
       if (!audioUrl) return fail("Music finished but no audio URL was returned.", { generationId: data.generationId ?? data.id });
+      const durationSec = typeof result.durationSec === "number" ? result.durationSec : undefined;
+      const previewUrl = previewFor(ctx, {
+        kind: "audio",
+        urls: [audioUrl],
+        model: model === MUSIC_MODELS[1] ? "Lyria 3 Pro" : "Lyria 3 Clip",
+        durationSec,
+        prompt,
+      });
       return ok({
         status: "succeeded",
         audioUrl,
+        previewUrl,
+        presentation: previewUrl
+          ? `Show the user this link to listen on Saad Studio: [Open the preview](${previewUrl}). Do not embed audioUrl as an image.`
+          : undefined,
         generationId: data.generationId ?? data.id ?? null,
         model,
-        durationSec: result.durationSec ?? null,
+        durationSec: durationSec ?? null,
         lyrics: typeof data.lyrics === "string" && data.lyrics ? data.lyrics : undefined,
       });
     }
@@ -442,9 +465,14 @@ export async function callExtraTool(
       const data = pickRecord(res.data);
       const audioUrl = absoluteUrl(data.audioUrl);
       if (!audioUrl) return fail("Speech finished but no audio URL was returned.");
+      const previewUrl = previewFor(ctx, { kind: "audio", urls: [audioUrl], model: `Voice: ${voiceId}`, prompt: text });
       return ok({
         status: "succeeded",
         audioUrl,
+        previewUrl,
+        presentation: previewUrl
+          ? `Show the user this link to listen on Saad Studio: [Open the preview](${previewUrl}). Do not embed audioUrl as an image.`
+          : undefined,
         voiceId,
         characterCount: data.characterCount ?? null,
         creditsUsed: data.creditsUsed ?? null,

@@ -4,6 +4,7 @@ import { verifyPanelToken } from "@/lib/panel-auth";
 import { getFallbackUrls } from "@/lib/utils";
 import { getInternalBaseUrl, getPublicOrigin, SMART_CLI_CANONICAL_ORIGIN } from "@/lib/smart-cli-origin";
 import { callExtraTool, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, EXTRA_TOOLS } from "@/lib/smart-cli-extra-tools";
+import { buildPreviewUrl } from "@/lib/smart-cli-preview";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -678,6 +679,14 @@ async function callGenerateImage(
   const absoluteUrls = toAbsoluteMediaUrls(urls);
   const collection = await collectInlineImages(urls);
 
+  const previewUrl = buildPreviewUrl(getPublicOrigin(request), {
+    kind: "image",
+    urls: absoluteUrls,
+    model: findModelLabel(body.modelId),
+    aspectRatio: body.aspectRatio,
+    prompt: body.prompt,
+  });
+
   const structuredContent = {
     prompt: body.prompt,
     modelId: body.modelId,
@@ -686,12 +695,18 @@ async function callGenerateImage(
     resolution: body.resolution,
     imageUrls: absoluteUrls,
     imageUrl: absoluteUrls[0] ?? null,
+    previewUrl,
     generationId: data.generationId ?? null,
   };
 
-  const fallbackText = absoluteUrls[0]
-    ? `Done — here's the image:\n${absoluteUrls[0]}`
-    : `Done — generated via ${findModelLabel(body.modelId)}.`;
+  // Agents turn a raw image URL in the text into an "unverified image" card.
+  // Point them at the branded Saad Studio preview page instead; the raw URL
+  // stays in structuredContent for chaining into generate_video.
+  const fallbackText = previewUrl
+    ? `Done — generated with ${findModelLabel(body.modelId)} (${body.aspectRatio}).\n\nShow the user this link to view the image on Saad Studio: [Open the preview](${previewUrl})\n\nTo reuse the image in another tool, use structuredContent.imageUrl (or call show_generations). Do not embed the raw file URL as an inline image.`
+    : absoluteUrls[0]
+      ? `Done — here's the image:\n${absoluteUrls[0]}`
+      : `Done — generated via ${findModelLabel(body.modelId)}.`;
 
   return {
     content: [
@@ -754,6 +769,14 @@ async function callGenerateStoryboard(
 
   const collection = await collectInlineImages(urls);
 
+  const previewUrl = buildPreviewUrl(getPublicOrigin(request), {
+    kind: "image",
+    urls: absoluteUrls,
+    model: findModelLabel(DEFAULT_IMAGE_MODEL),
+    aspectRatio,
+    prompt: idea,
+  });
+
   const structuredContent = {
     prompt: idea,
     modelId: DEFAULT_IMAGE_MODEL,
@@ -762,12 +785,15 @@ async function callGenerateStoryboard(
     imageUrls: absoluteUrls,
     imageUrl: absoluteUrls[0] ?? null,
     concepts,
+    previewUrl,
     generationId: data.generationId ?? null,
   };
 
-  const fallbackText = absoluteUrls.length
-    ? `Done — ${absoluteUrls.length} concept${absoluteUrls.length > 1 ? "s" : ""} ready:\n${absoluteUrls.map((u, i) => `  ${i + 1}. ${u}`).join("\n")}\n\nAsk which concept to animate, then call generate_video with imageUrl set to that URL.`
-    : `Storyboard job accepted but no URLs yet.`;
+  const fallbackText = !absoluteUrls.length
+    ? `Storyboard job accepted but no URLs yet.`
+    : previewUrl
+      ? `Done — ${absoluteUrls.length} concept${absoluteUrls.length > 1 ? "s" : ""} ready (numbered 1–${absoluteUrls.length}).\n\nShow the user this link to see all concepts on Saad Studio: [Open the preview](${previewUrl})\n\nAsk which concept to animate, then call generate_video with imageUrl set to that concept's imageUrl from structuredContent.concepts. Do not embed the raw file URLs as inline images.`
+      : `Done — ${absoluteUrls.length} concept${absoluteUrls.length > 1 ? "s" : ""} ready:\n${absoluteUrls.map((u, i) => `  ${i + 1}. ${u}`).join("\n")}\n\nAsk which concept to animate, then call generate_video with imageUrl set to that URL.`;
 
   return {
     content: [
@@ -818,6 +844,15 @@ async function callGenerateVideo(
         : [];
   const absoluteVideoUrls = toAbsoluteMediaUrls(rawVideoUrls);
 
+  const previewUrl = buildPreviewUrl(getPublicOrigin(request), {
+    kind: "video",
+    urls: absoluteVideoUrls,
+    model: findModelLabel(body.modelId),
+    aspectRatio: body.aspectRatio,
+    durationSec: body.duration,
+    prompt: body.prompt,
+  });
+
   const structuredContent = {
     prompt: body.prompt,
     modelId: body.modelId,
@@ -827,12 +862,15 @@ async function callGenerateVideo(
     resolution: body.resolution,
     videoUrls: absoluteVideoUrls,
     videoUrl: absoluteVideoUrls[0] ?? null,
+    previewUrl,
     generationId: videoData.generationId ?? null,
   };
 
-  const fallbackText = absoluteVideoUrls[0]
-    ? `Done — here's the video:\n${absoluteVideoUrls[0]}`
-    : `Video job accepted via ${findModelLabel(body.modelId)}. May still be processing.`;
+  const fallbackText = !absoluteVideoUrls[0]
+    ? `Video job accepted via ${findModelLabel(body.modelId)}. May still be processing.`
+    : previewUrl
+      ? `Done — video generated with ${findModelLabel(body.modelId)} (${body.duration}s, ${body.aspectRatio}).\n\nShow the user this link to watch it on Saad Studio: [Open the preview](${previewUrl})\n\nDirect file: ${absoluteVideoUrls[0]}`
+      : `Done — here's the video:\n${absoluteVideoUrls[0]}`;
 
   return {
     content: [{ type: "text", text: fallbackText }],
@@ -925,6 +963,7 @@ async function dispatchTool(
         name,
         args,
         (path, init) => panelFetch(request, path, init ?? {}, token),
+        { previewOrigin: getPublicOrigin(request) },
       );
       return extra ?? toolResult({ error: `Unknown tool: ${name}` }, true);
     }

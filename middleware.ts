@@ -74,6 +74,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/ads(.*)',
   '/connect-claude(.*)',
   '/smart-cli(.*)',
+  '/preview(.*)',
   '/api/showcase(.*)',
   '/api/explore/cms(.*)',
   '/api/transitions/presets(.*)',
