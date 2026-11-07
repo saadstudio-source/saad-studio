@@ -184,9 +184,9 @@ export const EXTRA_TOOLS = [
       type: "object",
       properties: {
         projectId: { type: "string", description: "projectId returned by post_produce_video." },
-        generationId: { type: "string", description: "generationId returned by post_produce_video (recommended)." },
+        generationId: { type: "string", description: "generationId returned by post_produce_video (required; ties the job to your account)." },
       },
-      required: ["projectId"],
+      required: ["projectId", "generationId"],
       additionalProperties: false,
     },
   },
@@ -492,9 +492,12 @@ export async function callExtraTool(
     case "get_post_production_status": {
       const projectId = asString(args.projectId);
       if (!projectId || projectId.length > 200) return fail("projectId is required.");
-      const generationId = asString(args.generationId);
-      const query = new URLSearchParams({ projectId });
-      if (generationId) query.set("generationId", generationId);
+      // generationId is mandatory: the server only polls jobs that belong to the
+      // caller's own generations, so the id returned by post_produce_video is the
+      // proof of ownership.
+      const generationId = validId(args.generationId);
+      if (!generationId) return fail("generationId is required (returned by post_produce_video together with projectId).");
+      const query = new URLSearchParams({ projectId, generationId });
       const res = await panel(`/api/panel/reap/status?${query.toString()}`, { method: "GET" });
       if (!res.ok) return describePanelFailure(res.status, res.data, "Could not read the job status.");
       const data = pickRecord(res.data);

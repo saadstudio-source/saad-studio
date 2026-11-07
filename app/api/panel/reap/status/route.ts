@@ -24,6 +24,37 @@ import { normalizeMediaUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Ownership gate: a caller may only poll (and have outputs persisted for) a Reap
+ * project that belongs to one of THEIR generations. Without this, any signed-in
+ * user who learned someone else's generationId could overwrite that row's media
+ * URL, and any projectId could be pulled into their own storage.
+ *
+ *  - generationId given: the row must be the caller's own Reap generation, and
+ *    while it is still in flight its task marker must be this projectId.
+ *  - generationId omitted (older panel builds): the project must still be an
+ *    in-flight job owned by the caller.
+ */
+async function ownsReapProject(userId: string, projectId: string, generationId: string | null): Promise<boolean> {
+  const marker = `task:reap:${projectId}`;
+
+  if (generationId) {
+    const generation = await prismadb.generation.findFirst({
+      where: { id: generationId, userId },
+      select: { mediaUrl: true, modelUsed: true },
+    });
+    if (!generation || !String(generation.modelUsed ?? "").startsWith("reap:")) return false;
+    if (generation.mediaUrl?.startsWith("task:") && generation.mediaUrl !== marker) return false;
+    return true;
+  }
+
+  const inFlight = await prismadb.generation.findFirst({
+    where: { userId, mediaUrl: marker },
+    select: { id: true },
+  });
+  return Boolean(inFlight);
+}
+
 export async function GET(req: NextRequest) {
   const token = extractPanelToken(req);
   if (!token) return NextResponse.json({ error: "Missing Authorization header." }, { status: 401 });
@@ -45,6 +76,10 @@ export async function GET(req: NextRequest) {
   try {
     const userId = verified.userId;
     await ensureUserRow(userId);
+
+    if (!(await ownsReapProject(userId, projectId, generationId))) {
+      return NextResponse.json({ error: "Job not found." }, { status: 404 });
+    }
 
     const result = await pollReapStatus(projectId);
 
@@ -109,7 +144,7 @@ export async function GET(req: NextRequest) {
 
     const rawDur = result.metadata?.duration ?? result.metadata?.inputDuration ?? result.metadata?.outputDuration;
     const actualDuration = typeof rawDur === "number" ? rawDur : (typeof rawDur === "string" ? parseFloat(rawDur) : null);
-    await finalizeReapGeneration(projectId, actualDuration).catch(() => {});
+    await finalizeReapGeneration(projectId, actualDuration, userId).catch(() => {});
 
     return NextResponse.json({
       status: "completed",

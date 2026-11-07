@@ -93,7 +93,7 @@ describe("tool definitions", () => {
     const minimalArgs: Record<string, Record<string, unknown>> = {
       quote_generation: { kind: "image" },
       get_job_status: { id: "clx1234567890" },
-      get_post_production_status: { projectId: "proj_123" },
+      get_post_production_status: { projectId: "proj_123", generationId: "clx1234567890" },
     };
     for (const tool of readOnly) {
       const { panel, calls } = mockPanel();
@@ -236,9 +236,16 @@ describe("post-production and uploads", () => {
 
   it("get_post_production_status builds the query safely", async () => {
     const { panel, calls } = mockPanel({ "GET /api/panel/reap/status": { data: { status: "completed", url: "https://cdn.example/o.mp4", urls: ["https://cdn.example/o.mp4"] } } });
-    const out = text(await callExtraTool("get_post_production_status", { projectId: "a b&c", generationId: "g1" }, panel));
-    expect(calls[0].path).toBe("/api/panel/reap/status?projectId=a+b%26c&generationId=g1");
+    const out = text(await callExtraTool("get_post_production_status", { projectId: "a b&c", generationId: "clx1234567890" }, panel));
+    expect(calls[0].path).toBe("/api/panel/reap/status?projectId=a+b%26c&generationId=clx1234567890");
     expect(out).toMatchObject({ status: "completed", url: "https://cdn.example/o.mp4" });
+  });
+
+  it("get_post_production_status requires a well-formed generationId (ownership proof)", async () => {
+    const { panel, calls } = mockPanel();
+    expect((await callExtraTool("get_post_production_status", { projectId: "proj_123" }, panel))!.isError).toBe(true);
+    expect((await callExtraTool("get_post_production_status", { projectId: "proj_123", generationId: "../x" }, panel))!.isError).toBe(true);
+    expect(calls).toHaveLength(0);
   });
 
   it("create_upload_url only allows media content types", async () => {

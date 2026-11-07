@@ -1414,7 +1414,12 @@ async function maybeScanAndFlagRecentGenerationsByMediaUrls(userId: string, medi
   await Promise.all(gens.map((g) => maybeScanAndFlagGeneration(g.id).catch(() => {})));
 }
 
-export async function finalizeReapGeneration(projectId: string, duration: number | null): Promise<void> {
+export async function finalizeReapGeneration(
+  projectId: string,
+  duration: number | null,
+  /** When given, only that user's generations are finalized (callers acting for a user must pass it). */
+  userId?: string,
+): Promise<void> {
   if (!projectId) return;
 
   const generations = await prismadb.generation.findMany({
@@ -1422,7 +1427,8 @@ export async function finalizeReapGeneration(projectId: string, duration: number
       OR: [
         { mediaUrl: `task:reap:${projectId}` },
         { mediaUrl: `task:clipcraft:${projectId}` }
-      ]
+      ],
+      ...(userId ? { userId } : {}),
     }
   });
 
