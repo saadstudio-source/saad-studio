@@ -5,6 +5,15 @@ import { getFallbackUrls } from "@/lib/utils";
 import { getInternalBaseUrl, getPublicOrigin, SMART_CLI_CANONICAL_ORIGIN } from "@/lib/smart-cli-origin";
 import { callExtraTool, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, EXTRA_TOOLS } from "@/lib/smart-cli-extra-tools";
 import { buildPreviewUrl } from "@/lib/smart-cli-preview";
+import {
+  CHATGPT_CLIENT_PARAM,
+  CHATGPT_MCP_PATH,
+  STUDIO_RESOURCE,
+  adaptResultForChatGpt,
+  buildStudioOutput,
+  linkToolsToStudioWidget,
+} from "@/lib/smart-cli-chatgpt";
+import { STUDIO_WIDGET_HTML } from "@/lib/smart-cli-studio-widget";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -178,6 +187,10 @@ const CORE_TOOLS = [
 ];
 
 const tools = [...CORE_TOOLS, ...EXTRA_TOOLS];
+
+// Tool list for the ChatGPT connector: same tools + open_studio, with the studio widget
+// linked to the render tools. The default list above is never touched.
+const chatgptTools = linkToolsToStudioWidget(tools);
 
 const AVAILABLE_MODELS = [
   { id: "nano-banana-pro", kind: "image", label: "Nano Banana Pro", notes: "Default. Professional 4K asset production.", badges: ["default", "pro"] },
@@ -410,14 +423,30 @@ function getOrigin(request: Request) {
   return getPublicOrigin(request);
 }
 
+// The ChatGPT connector lives at its own URL (see lib/smart-cli-chatgpt.ts) so the
+// in-chat widget is never offered to Claude. `client=chatgpt` is set by
+// app/api/smart-cli/chatgpt/mcp/route.ts, never trusted from the public query string
+// except to pick the variant (it only changes presentation, not authorization).
+function isChatGptVariant(request: Request): boolean {
+  try {
+    return new URL(request.url).searchParams.get("client") === CHATGPT_CLIENT_PARAM;
+  } catch {
+    return false;
+  }
+}
+
 function authChallenge(request: Request) {
   const origin = getOrigin(request);
+  // Path-specific metadata so the advertised `resource` matches the URL ChatGPT connected to.
+  const metadataPath = isChatGptVariant(request)
+    ? `/.well-known/oauth-protected-resource${CHATGPT_MCP_PATH}`
+    : "/.well-known/oauth-protected-resource";
   return new NextResponse(null, {
     status: 401,
     headers: {
       "Cache-Control": "no-store",
       "MCP-Protocol-Version": "2024-11-05",
-      "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="smart_cli.generate smart_cli.read"`,
+      "WWW-Authenticate": `Bearer resource_metadata="${origin}${metadataPath}", scope="smart_cli.generate smart_cli.read"`,
     },
   });
 }
@@ -946,6 +975,17 @@ async function dispatchTool(
   }
 
   switch (name) {
+    case "open_studio":
+      // Only reachable from the ChatGPT variant (the default tool list does not contain it).
+      return {
+        content: [{ type: "text", text: "The Saad Studio panel is open in the chat. Let the user create from it; do not describe it at length." }],
+        isError: false,
+        structuredContent: buildStudioOutput(
+          AVAILABLE_MODELS,
+          { image: DEFAULT_IMAGE_MODEL, video: DEFAULT_VIDEO_MODEL },
+          { kind: args.kind, prompt: args.prompt },
+        ),
+      };
     case "generate_image":
       return callGenerateImage(request, args, token);
     case "generate_storyboard":
@@ -989,11 +1029,16 @@ async function handleRpcPayload(body: JsonRpcRequest, request: Request): Promise
   }
 
   if (method === "ping") return rpcPayload(id, {});
-  if (method === "tools/list") return rpcPayload(id, { tools });
+  const chatgpt = isChatGptVariant(request);
+  if (method === "tools/list") return rpcPayload(id, { tools: chatgpt ? chatgptTools : tools });
+
+  // The ChatGPT connector serves only the studio panel; the default connector keeps
+  // its (unlinked) image/video widgets exactly as before.
+  const resources = chatgpt ? [{ ...STUDIO_RESOURCE, text: STUDIO_WIDGET_HTML }] : UI_RESOURCES;
 
   if (method === "resources/list") {
     return rpcPayload(id, {
-      resources: UI_RESOURCES.map(({ text: _text, ...rest }) => rest),
+      resources: resources.map(({ text: _text, ...rest }) => rest),
     });
   }
 
@@ -1001,7 +1046,7 @@ async function handleRpcPayload(body: JsonRpcRequest, request: Request): Promise
     const uri = typeof body?.params === "object" && body?.params
       ? (body.params as { uri?: unknown }).uri
       : undefined;
-    const match = UI_RESOURCES.find((r) => r.uri === uri);
+    const match = resources.find((r) => r.uri === uri);
     if (!match) return rpcErrorPayload(id, -32602, `Unknown resource: ${String(uri ?? "missing")}`);
     return rpcPayload(id, {
       contents: [{
@@ -1017,10 +1062,10 @@ async function handleRpcPayload(body: JsonRpcRequest, request: Request): Promise
     const requestedName = body?.params?.name;
     const name = normalizeToolName(requestedName);
     const args = normalizeToolArgs(body?.params?.arguments ?? {});
-    const tool = tools.find((item) => item.name === name);
+    const tool = (chatgpt ? chatgptTools : tools).find((item) => item.name === name);
     if (!tool) return rpcErrorPayload(id, -32602, `Unknown tool: ${String(requestedName ?? "missing")}`);
     const result = await dispatchTool(name, args, request);
-    return rpcPayload(id, result);
+    return rpcPayload(id, chatgpt ? adaptResultForChatGpt(name, result) : result);
   }
 
   return rpcErrorPayload(id, -32601, "Method not found");

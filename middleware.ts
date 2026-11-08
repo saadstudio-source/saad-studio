@@ -1,7 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from "next/server";
 import { getAllowedOrigins } from "@/lib/security";
-import { getPublicOrigin } from "@/lib/smart-cli-origin";
+import { getPublicOrigin, SMART_CLI_CHATGPT_MCP_PATH, SMART_CLI_MCP_PATH } from "@/lib/smart-cli-origin";
 import { buildSignInRedirectUrl } from "@/lib/auth-redirect";
 
 const isPublicRoute = createRouteMatcher([
@@ -231,10 +231,13 @@ function smartCliOAuthMetadata(req: Request) {
   });
 }
 
-function smartCliProtectedResourceMetadata(req: Request) {
+// `resource` must equal the MCP URL the client connected to, so the ChatGPT connector
+// (its own URL, see lib/smart-cli-chatgpt.ts) gets path-specific metadata.
+function smartCliProtectedResourceMetadata(req: Request, pathname: string) {
   const origin = getPublicOrigin(req);
+  const resourcePath = pathname.endsWith(SMART_CLI_CHATGPT_MCP_PATH) ? SMART_CLI_CHATGPT_MCP_PATH : SMART_CLI_MCP_PATH;
   return NextResponse.json({
-    resource: `${origin}/api/smart-cli/mcp`,
+    resource: `${origin}${resourcePath}`,
     authorization_servers: [origin],
     bearer_methods_supported: ["header"],
     scopes_supported: ["smart_cli.generate", "smart_cli.read"],
@@ -259,7 +262,7 @@ export default clerkMiddleware(async (auth, req) => {
     return applySecurityHeaders(smartCliOAuthMetadata(req), req);
   }
   if (pathname.startsWith("/.well-known/oauth-protected-resource")) {
-    return applySecurityHeaders(smartCliProtectedResourceMetadata(req), req);
+    return applySecurityHeaders(smartCliProtectedResourceMetadata(req, pathname), req);
   }
 
   // Redirect root "/" to "/explore"

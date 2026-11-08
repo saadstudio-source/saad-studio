@@ -43,6 +43,7 @@ import {
   PRESET_CATEGORIES,
   SMART_CLI_AGENT_SETUP_PROMPT,
   SMART_CLI_CONNECT_LINK,
+  SMART_CLI_CHATGPT_MCP_URL,
   SMART_CLI_MCP_URL,
   SMART_CLI_PRESETS,
   chatgptTryUrl,
@@ -522,12 +523,12 @@ export default function SmartCliHub() {
                     </button>
                   </div>
                   <CopyButton
-                    value={SMART_CLI_MCP_URL}
+                    value={activeTab.id === "chatgpt" ? SMART_CLI_CHATGPT_MCP_URL : SMART_CLI_MCP_URL}
                     copiedLabel="URL copied"
                     aria-label="Copy connector URL"
                     className="mx-auto mt-4 rounded-md px-2 py-1 font-mono text-xs text-slate-500 hover:text-slate-200"
                   >
-                    {SMART_CLI_MCP_URL}
+                    {activeTab.id === "chatgpt" ? SMART_CLI_CHATGPT_MCP_URL : SMART_CLI_MCP_URL}
                   </CopyButton>
                 </>
               )}

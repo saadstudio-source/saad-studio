@@ -8,6 +8,9 @@
 // tool lists and the presets below.
 
 export const SMART_CLI_MCP_URL = "https://saadstudio.app/api/smart-cli/mcp";
+// ChatGPT gets its own URL: same server, plus the in-chat Saad Studio panel
+// (lib/smart-cli-chatgpt.ts). Other agents must keep using SMART_CLI_MCP_URL.
+export const SMART_CLI_CHATGPT_MCP_URL = "https://saadstudio.app/api/smart-cli/chatgpt/mcp";
 export const SMART_CLI_CONNECTOR_NAME = "Saad Studio";
 export const SMART_CLI_SKILLS_INSTALL =
   "curl -fsSL https://raw.githubusercontent.com/saadstudio-source/saad-studio/main/packages/skills/install.sh | bash";
@@ -108,12 +111,12 @@ export const CONNECT_GUIDES: Record<string, ConnectGuide> = {
       },
       {
         title: "Create a custom connector",
-        text: "Add a new connector named Saad Studio, paste this MCP server URL and choose OAuth as the authentication.",
-        copy: SMART_CLI_MCP_URL,
+        text: "Add a new connector named Saad Studio, paste this MCP server URL (it is the ChatGPT one — it also opens the Saad Studio panel inside the chat) and choose OAuth as the authentication.",
+        copy: SMART_CLI_CHATGPT_MCP_URL,
       },
       {
         title: "Sign in and use it in a chat",
-        text: "Approve the Saad Studio sign-in, then enable the connector in a new chat and ask for an image or video.",
+        text: "Approve the Saad Studio sign-in, then enable the connector in a new chat and ask for an image or video, or say “open Saad Studio” to get the panel.",
       },
     ],
     note: "Custom connectors need a ChatGPT plan with Developer mode, and Business / Enterprise workspaces may need an admin to allow them. Menu names can vary slightly by plan.",
@@ -314,7 +317,7 @@ export function claudeTryUrl(prompt: string): string {
 }
 
 export function chatgptTryUrl(prompt: string): string {
-  const text = `${prompt}\n\nIf Saad Studio is not connected, tell me to add it as a custom connector in ChatGPT using ${SMART_CLI_MCP_URL} before continuing.`;
+  const text = `${prompt}\n\nIf Saad Studio is not connected, tell me to add it as a custom connector in ChatGPT using ${SMART_CLI_CHATGPT_MCP_URL} before continuing.`;
   return `https://chatgpt.com/?q=${encodeURIComponent(text)}`;
 }
 

@@ -63,3 +63,7 @@ export function getPublicOrigin(request: Request): string {
 
   return SMART_CLI_CANONICAL_ORIGIN;
 }
+
+/** MCP endpoint paths. The ChatGPT one also serves the in-chat panel (lib/smart-cli-chatgpt.ts). */
+export const SMART_CLI_MCP_PATH = "/api/smart-cli/mcp";
+export const SMART_CLI_CHATGPT_MCP_PATH = "/api/smart-cli/chatgpt/mcp";
