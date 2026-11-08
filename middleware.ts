@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from "next/server";
 import { getAllowedOrigins } from "@/lib/security";
 import { getPublicOrigin } from "@/lib/smart-cli-origin";
+import { buildSignInRedirectUrl } from "@/lib/auth-redirect";
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -75,6 +76,10 @@ const isPublicRoute = createRouteMatcher([
   '/connect-claude(.*)',
   '/smart-cli(.*)',
   '/preview(.*)',
+  // Crawler files: not matched by the static-asset exclusion in `config`, so
+  // without this Googlebot (Accept: */*) got the protect() loop -> HTTP 500.
+  '/robots.txt',
+  '/sitemap.xml',
   '/api/showcase(.*)',
   '/api/explore/cms(.*)',
   '/api/transitions/presets(.*)',
@@ -335,7 +340,14 @@ export default clerkMiddleware(async (auth, req) => {
         );
       }
     } else {
-      auth().protect();
+      // Never call protect() bare here: for non-browser requests Clerk rewrites
+      // to `${publicOrigin}/clerk_<ts>`, which loops through the reverse proxy and
+      // ends as HTTP 500 after ~30 s (see lib/auth-redirect.ts). An explicit
+      // unauthenticatedUrl makes every client get a plain redirect to sign-in.
+      const origin = getPublicOrigin(req);
+      auth().protect({
+        unauthenticatedUrl: buildSignInRedirectUrl(origin, req.nextUrl.pathname, req.nextUrl.search),
+      });
     }
   }
   return applySecurityHeaders(NextResponse.next(), req);
