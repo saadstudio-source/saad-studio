@@ -86,3 +86,35 @@ describe("GPT Image billing and dispatch use the same tier", () => {
     expect(resolveWaveSpeedImageModelRoute(upper, false, 1)?.model).toBe("openai/gpt-image-2.6-flare/text-to-image");
   });
 });
+
+describe("GPT Image pricing follows the route that is actually called", () => {
+  const rows = IMAGE_MODELS.filter((m) => /gpt-image-2\.[56]/.test(m.id));
+  const tiers = ["low", "medium", "high", "xhigh", "max"];
+  const resolutions = ["1k", "2k", "4k"];
+
+  it("prices the provider route id exactly like the site id (text/edit table, references, count)", () => {
+    for (const row of rows) {
+      const edit = row.inputType !== "text-to-image";
+      const route = resolveWaveSpeedImageModelRoute(row.id, edit, 1)!;
+      for (const quality of tiers) {
+        for (const resolution of resolutions) {
+          expect(getWaveSpeedGptImage25Credits(route.model, 2, quality, resolution, 3), `${row.id} ${quality}/${resolution}`)
+            .toBe(getWaveSpeedGptImage25Credits(row.id, 2, quality, resolution, 3));
+        }
+      }
+    }
+  });
+
+  it("recognises the GPT route behind a label / upstream-style lookup, where the client string is not a site id", () => {
+    // The route resolves the catalog row by id, label or upstream id, then calls the row's route.
+    // The gate must therefore key on the route, which is a GPT endpoint for every such row.
+    for (const row of rows) {
+      const edit = row.inputType !== "text-to-image";
+      const route = resolveWaveSpeedImageModelRoute(row.id, edit, 1)!;
+      expect(isWaveSpeedGptImageModelId(row.label), `${row.label} is not a site id`).toBe(false);
+      expect(isWaveSpeedGptImageModelId(route.model), row.id).toBe(true);
+      // max / 4k on the route is the top of the band for text and edit alike
+      expect(getWaveSpeedGptImage25Credits(route.model, 1, "max", "4k", edit ? 1 : 0), row.id).toBe(15);
+    }
+  });
+});

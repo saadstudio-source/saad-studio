@@ -713,8 +713,19 @@ export async function POST(req: NextRequest) {
     // GPT Image 2.5 / 2.6: normalise quality + resolution ONCE and use the same values for the
     // credit charge and the provider payload (a padded / re-cased / imageSize-only value must not
     // be billed as one tier and rendered as another). Unknown values are rejected, not defaulted.
+    //
+    // The gate looks at the route that will ACTUALLY be called, not at the client's model string:
+    // the catalog lookup also matches by label / upstream id, so "GPT Image 2.6" reaches the
+    // GPT endpoint even though that string does not look like a site id. The same route id is
+    // used for pricing, so the edit-vs-text table and the reference surcharge always apply.
+    const gptPriceId =
+      isWaveSpeedImageModel && waveSpeedImageRoute && isWaveSpeedGptImageModelId(waveSpeedImageRoute.model)
+        ? waveSpeedImageRoute.model
+        : isWaveSpeedImageModel && isWaveSpeedGptImageModelId(effectiveModelId)
+          ? effectiveModelId
+          : null;
     let gptTier: { quality: string; resolution: string } | null = null;
-    if (isWaveSpeedImageModel && isWaveSpeedGptImageModelId(effectiveModelId)) {
+    if (gptPriceId) {
       const tier = normalizeGptImageTier(quality, resolution, imageSize);
       if (!tier.ok) {
         return NextResponse.json({ error: tier.error }, { status: 400 });
@@ -734,8 +745,8 @@ export async function POST(req: NextRequest) {
     let creditsToCharge = unlimited.eligible
       ? 0
       : await getGenerationCost(effectiveModelId, 5, numImages, chargeQuality);
-    if (!unlimited.eligible && gptTier) {
-      creditsToCharge = getWaveSpeedGptImage25Credits(effectiveModelId, numImages, gptTier.quality, gptTier.resolution, rawRefUrls.length);
+    if (!unlimited.eligible && gptTier && gptPriceId) {
+      creditsToCharge = getWaveSpeedGptImage25Credits(gptPriceId, numImages, gptTier.quality, gptTier.resolution, rawRefUrls.length);
     }
     if (!unlimited.eligible && creditsToCharge <= 0 && dynamicModel?.creditCost) {
       creditsToCharge = Number(dynamicModel.creditCost) * (Number(numImages) || 1);
