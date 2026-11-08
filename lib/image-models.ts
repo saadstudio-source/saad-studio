@@ -29,6 +29,8 @@ export interface ImageModel {
   maxImages: number;
   /** How many reference images this model accepts for the configured provider route. */
   maxRefImages: number;
+  /** Planning depth presets sent as `complexity` (GPT Image 2.6). Free: never changes the price. */
+  complexityParam?: string[];
   /** Whether this model exposes a grok-style mode toggle. */
   grokMode?: boolean;
   /** Quality presets sent as a `quality` param (e.g. GPT Image). */
@@ -99,16 +101,50 @@ const GPT_IMAGE_25_EDIT_USD: Record<string, Record<string, number>> = {
   high: { "1k": 0.10, "2k": 0.16, "4k": 0.28 }, xhigh: { "1k": 0.17, "2k": 0.28, "4k": 0.49 }, max: { "1k": 0.37, "2k": 0.61, "4k": 1.01 },
 };
 
+// GPT Image 2.6 (Flare + Sunburst share one tariff). WaveSpeed docs: edit prices already include
+// ONE input image ($0.015); every extra image adds $0.015. complexity never changes the price.
+// SVG output adds $0.02 and GIF costs the same as a still (text-to-image only; not exposed yet).
+const GPT_IMAGE_26_TEXT_USD: Record<string, Record<string, number>> = {
+  low: { "1k": 0.03, "2k": 0.06, "4k": 0.10 }, medium: { "1k": 0.05, "2k": 0.10, "4k": 0.18 },
+  high: { "1k": 0.06, "2k": 0.12, "4k": 0.21 }, xhigh: { "1k": 0.11, "2k": 0.21, "4k": 0.38 }, max: { "1k": 0.25, "2k": 0.47, "4k": 0.85 },
+};
+const GPT_IMAGE_26_EDIT_USD: Record<string, Record<string, number>> = {
+  low: { "1k": 0.045, "2k": 0.075, "4k": 0.115 }, medium: { "1k": 0.065, "2k": 0.115, "4k": 0.195 },
+  high: { "1k": 0.075, "2k": 0.135, "4k": 0.225 }, xhigh: { "1k": 0.125, "2k": 0.225, "4k": 0.395 }, max: { "1k": 0.265, "2k": 0.485, "4k": 0.865 },
+};
+
+/** True for the WaveSpeed-routed GPT Image 2.5 / 2.6 rows (Flare + Sunburst, text + edit). */
+export function isWaveSpeedGptImageModelId(modelId: string): boolean {
+  return /gpt-image-2\.[56]/.test(modelId);
+}
+
+export const GPT_IMAGE_COMPLEXITIES = ["low", "medium", "high"] as const;
+
+/** Credits charged per image for GPT Image 2.5 / 2.6: cheapest tier and dearest tier. */
+export const GPT_IMAGE_CREDIT_FLOOR = 1;
+export const GPT_IMAGE_CREDIT_CEILING = 15;
+
 export function getWaveSpeedGptImage25Credits(modelId: string, numImages = 1, quality?: string | null, resolution?: string | null, referenceCount = 0): number {
   const q = String(quality ?? "medium").toLowerCase();
   const resValue = String(resolution ?? "1k").toLowerCase();
   const res = resValue === "4k" ? "4k" : resValue === "2k" ? "2k" : "1k";
   const isEdit = modelId.includes("image-to-image") || modelId.endsWith("/edit") || modelId.includes("-edit");
-  const table = isEdit ? GPT_IMAGE_25_EDIT_USD : GPT_IMAGE_25_TEXT_USD;
+  const is26 = modelId.includes("gpt-image-2.6");
+  const table = is26
+    ? (isEdit ? GPT_IMAGE_26_EDIT_USD : GPT_IMAGE_26_TEXT_USD)
+    : (isEdit ? GPT_IMAGE_25_EDIT_USD : GPT_IMAGE_25_TEXT_USD);
   const base = table[q]?.[res] ?? table.medium[res];
   const extraReferenceUsd = isEdit ? Math.max(0, Math.ceil(Number(referenceCount) || 0) - 1) * 0.015 : 0;
   const units = Math.max(1, Math.ceil(Number(numImages) || 1));
-  return parseFloat(((base + extraReferenceUsd) * 1.4 * 40 * units).toFixed(2));
+  // Owner-set price band (2026-11-08): the cheapest combination (low @ 1k) costs
+  // GPT_IMAGE_CREDIT_FLOOR credits and the dearest (max @ 4k) GPT_IMAGE_CREDIT_CEILING credits.
+  // Everything in between is placed on a straight line by the provider's USD cost, so a
+  // higher quality or resolution is never cheaper than a lower one. Extra references add
+  // their provider cost on the same line.
+  const minUsd = table.low["1k"];
+  const maxUsd = table.max["4k"];
+  const perImage = GPT_IMAGE_CREDIT_FLOOR + ((base + extraReferenceUsd - minUsd) / (maxUsd - minUsd)) * (GPT_IMAGE_CREDIT_CEILING - GPT_IMAGE_CREDIT_FLOOR);
+  return parseFloat((perImage * units).toFixed(2));
 }
 
 export function getImageCreditCost(_model: ImageModel, numImages = 1, quality?: string | null, resolution?: string | null, referenceCount = 0): number {
@@ -117,7 +153,7 @@ export function getImageCreditCost(_model: ImageModel, numImages = 1, quality?: 
   // The per-model / per-quality multiplier tables above are legacy display data that no
   // longer reflect what the server actually charges — do not reintroduce them here.
   const safeUnits = Math.max(1, Math.ceil(Number(numImages) || 1));
-  if (_model.id.includes("gpt-image-2.5")) {
+  if (isWaveSpeedGptImageModelId(_model.id)) {
     return getWaveSpeedGptImage25Credits(_model.id, safeUnits, quality, resolution, referenceCount);
   }
   const q = quality?.trim().toLowerCase() ?? "1k";
@@ -486,6 +522,72 @@ export const IMAGE_MODELS: ImageModel[] = [
     creditCost: 1.0,
   },
   // â”€â”€ GPT Image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // GPT Image 2.6 — WaveSpeed openai/gpt-image-2.6-{flare,sunburst}/{text-to-image,edit}.
+  // Flare = fast everyday iteration; Sunburst = extra fidelity on intricate detail.
+  {
+    id: "gpt-image-2.6-flare-text-to-image",
+    label: "GPT Image 2.6",
+    sublabel: "OpenAI fast text-to-image, up to 4K",
+    badge: "NEW",
+    group: "OpenAI Images",
+    inputType: "text-to-image",
+    aspectRatios: ["auto", "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "9:21", "21:9"],
+    maxImages: 1,
+    maxRefImages: 16,
+    imageInputField: "images",
+    qualityParam: ["low", "medium", "high", "xhigh", "max"],
+    resolutions: ["1k", "2k", "4k"],
+    complexityParam: ["low", "medium", "high"],
+    creditCost: 2.0,
+  },
+  {
+    id: "gpt-image-2.6-flare-image-to-image",
+    label: "GPT Image 2.6 Edit",
+    sublabel: "OpenAI fast editing, up to 16 references",
+    badge: "NEW",
+    group: "OpenAI Images",
+    inputType: "image-to-image",
+    aspectRatios: ["auto", "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "9:21", "21:9"],
+    maxImages: 1,
+    maxRefImages: 16,
+    imageInputField: "images",
+    qualityParam: ["low", "medium", "high", "xhigh", "max"],
+    resolutions: ["1k", "2k", "4k"],
+    complexityParam: ["low", "medium", "high"],
+    creditCost: 2.0,
+  },
+  {
+    id: "gpt-image-2.6-sunburst-text-to-image",
+    label: "GPT Image 2.6 Sunburst",
+    sublabel: "OpenAI max-fidelity render for fine detail",
+    badge: "NEW",
+    group: "OpenAI Images",
+    inputType: "text-to-image",
+    aspectRatios: ["auto", "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "9:21", "21:9"],
+    maxImages: 1,
+    maxRefImages: 16,
+    imageInputField: "images",
+    qualityParam: ["low", "medium", "high", "xhigh", "max"],
+    resolutions: ["1k", "2k", "4k"],
+    complexityParam: ["low", "medium", "high"],
+    creditCost: 2.0,
+  },
+  {
+    id: "gpt-image-2.6-sunburst-image-to-image",
+    label: "GPT Image 2.6 Sunburst Edit",
+    sublabel: "OpenAI max-fidelity editing for fine detail",
+    badge: "NEW",
+    group: "OpenAI Images",
+    inputType: "image-to-image",
+    aspectRatios: ["auto", "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "9:21", "21:9"],
+    maxImages: 1,
+    maxRefImages: 16,
+    imageInputField: "images",
+    qualityParam: ["low", "medium", "high", "xhigh", "max"],
+    resolutions: ["1k", "2k", "4k"],
+    complexityParam: ["low", "medium", "high"],
+    creditCost: 2.0,
+  },
   {
     id: "gpt-image-2.5-flare-text-to-image",
     label: "GPT Image 2.5",

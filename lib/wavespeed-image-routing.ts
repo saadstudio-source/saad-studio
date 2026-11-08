@@ -57,17 +57,17 @@ export function resolveWaveSpeedImageModelRoute(
   const id = modelId.toLowerCase();
   const wantsMulti = numImages > 1;
 
-  if (id === "gpt-image-2.5-flare-text-to-image" || id === "openai/gpt-image-2.5-flare/text-to-image") {
-    return { model: "openai/gpt-image-2.5-flare/text-to-image", maxReferenceImages: 0, maxOutputImages: 1, inputShape: "aspect-resolution" };
-  }
-  if (id === "gpt-image-2.5-flare-image-to-image" || id === "openai/gpt-image-2.5-flare/edit") {
-    return { model: "openai/gpt-image-2.5-flare/edit", referenceField: "images", requiresReference: true, maxReferenceImages: 16, maxOutputImages: 1, inputShape: "aspect-resolution" };
-  }
-  if (id === "gpt-image-2.5-sunburst-text-to-image" || id === "openai/gpt-image-2.5-sunburst/text-to-image") {
-    return { model: "openai/gpt-image-2.5-sunburst/text-to-image", maxReferenceImages: 0, maxOutputImages: 1, inputShape: "aspect-resolution" };
-  }
-  if (id === "gpt-image-2.5-sunburst-image-to-image" || id === "openai/gpt-image-2.5-sunburst/edit") {
-    return { model: "openai/gpt-image-2.5-sunburst/edit", referenceField: "images", requiresReference: true, maxReferenceImages: 16, maxOutputImages: 1, inputShape: "aspect-resolution" };
+  // GPT Image 2.5 and 2.6 (Flare + Sunburst): same WaveSpeed contract, versioned endpoint.
+  //   site id:  gpt-image-<ver>-<tier>-text-to-image | gpt-image-<ver>-<tier>-image-to-image
+  //   provider: openai/gpt-image-<ver>-<tier>/text-to-image | openai/gpt-image-<ver>-<tier>/edit
+  const gptImage = id.match(/^(?:openai\/)?gpt-image-(2\.[56])-(flare|sunburst)(?:-(text-to-image|image-to-image)|\/(text-to-image|edit))$/);
+  if (gptImage) {
+    const [, version, tier, siteKind, providerKind] = gptImage;
+    const edit = siteKind === "image-to-image" || providerKind === "edit";
+    const base = `openai/gpt-image-${version}-${tier}`;
+    return edit
+      ? { model: `${base}/edit`, referenceField: "images", requiresReference: true, maxReferenceImages: 16, maxOutputImages: 1, inputShape: "aspect-resolution" }
+      : { model: `${base}/text-to-image`, maxReferenceImages: 0, maxOutputImages: 1, inputShape: "aspect-resolution" };
   }
 
   if (id === "seedream/4.5-text-to-image" || id === "bytedance/seedream-v4.5") {
@@ -309,6 +309,8 @@ export function buildWaveSpeedImageInput(
     referenceUrls?: string[];
     negativePrompt?: string | null;
     outputFormat?: "png" | "jpeg" | "webp";
+    /** GPT Image 2.6 only: planning depth before drawing (low | medium | high). Free. */
+    complexity?: string | null;
   },
 ): Record<string, unknown> {
   const requestedQuality = params.quality ?? params.resolution ?? params.imageSize;
@@ -336,9 +338,14 @@ export function buildWaveSpeedImageInput(
     input.resolution = config.inputShape === "seedream-pro"
       ? normalizeSeedream5ProResolution(requestedResolution)
       : String(requestedResolution).trim().toLowerCase();
-    if (config.model.includes("gpt-image-2.5")) {
+    if (/gpt-image-2\.[56]/.test(config.model)) {
       input.quality = String(params.quality ?? "medium").trim().toLowerCase();
       input.output_format = params.outputFormat ?? "png";
+      // Only 2.6 documents `complexity`; omit it unless asked so the provider default (high) applies.
+      const complexity = String(params.complexity ?? "").trim().toLowerCase();
+      if (config.model.includes("gpt-image-2.6") && ["low", "medium", "high"].includes(complexity)) {
+        input.complexity = complexity;
+      }
     }
   } else if (config.inputShape === "seedream-lite-size") {
     input.size = normalizeSeedream5LiteSize(requestedQuality);

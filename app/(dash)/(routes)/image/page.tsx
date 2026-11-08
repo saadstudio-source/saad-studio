@@ -63,6 +63,7 @@ import { useAuthenticatedFetch } from "@/hooks/use-authenticated-fetch";
 import { useActiveProfile } from "@/lib/profile-context";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { ImageModelCapabilityBadges } from "@/components/image/ImageModelCapabilityBadges";
+import { describeQualityOptions, describeResolutionOptions } from "@/lib/image-option-labels";
 
 type ToolId = "create" | "relight" | "inpaint" | "upscale" | "face-swap" | "enhance";
 
@@ -719,6 +720,42 @@ function UploadBox({ label, file, onFile, required = false, accept = "image/*" }
   );
 }
 
+/** Radio list with a title + description per option (Quality / Resolution), values stay the provider's. */
+function OptionPicker({ ariaLabel, value, options, info, onChange }: {
+  ariaLabel: string;
+  value: string;
+  options: readonly string[];
+  info: Record<string, { title: string; description: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={ariaLabel} className="flex flex-col gap-1">
+      {options.map((option) => {
+        const selected = option === value;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(option)}
+            className={cn(
+              "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition-colors",
+              selected ? "bg-white/10 ring-1 ring-pink-500/40" : "hover:bg-white/5",
+            )}
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-zinc-100">{info[option].title}</span>
+              <span className="block text-xs text-zinc-400">{info[option].description}</span>
+            </span>
+            {selected ? <Check className="h-4 w-4 shrink-0 text-pink-400" aria-hidden="true" /> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function SettingsAccordion({ label, summary, children, defaultOpen = false }: { label: string; summary?: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const { t, lang } = useImageTranslation();
   const [open, setOpen] = useState(defaultOpen);
@@ -1303,6 +1340,8 @@ export default function ImageWorkspacePage() {
   const [quality, setQuality] = useState("standard");
   const [resolution, setResolution] = useState("1k");
   const [outputFormat, setOutputFormat] = useState<"png" | "jpeg" | "webp">("png");
+  // GPT Image 2.6 planning depth. "high" is the provider default and costs the same as the others.
+  const [complexity, setComplexity] = useState("high");
   const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionPopupRef = useRef<HTMLDivElement>(null);
@@ -1835,7 +1874,9 @@ export default function ImageWorkspacePage() {
   useEffect(() => {
     setNumImages(Math.min(Math.max(1, numImages), selectedModel.maxImages));
     if (selectedModel.aspectRatios.length && !selectedModel.aspectRatios.includes(aspectRatio)) setAspectRatio(selectedModel.aspectRatios[0]);
-    if (qualityOptions.length && !qualityOptions.includes(quality)) setQuality(qualityOptions[0]);
+    // GPT Image 2.6 documents `medium` as its default tier; every other model keeps starting on its first option.
+    const defaultQuality = selectedModel.id.includes("gpt-image-2.6") && qualityOptions.includes("medium") ? "medium" : qualityOptions[0];
+    if (qualityOptions.length && !qualityOptions.includes(quality)) setQuality(defaultQuality);
   }, [selectedModel, numImages, aspectRatio, quality, qualityOptions]);
 
   const canGenerate = useMemo(() => {
@@ -1932,7 +1973,8 @@ export default function ImageWorkspacePage() {
       numImages,
       quality: activeQuality,
       resolution: resolutionOptions.length ? resolution : activeQuality,
-      outputFormat: selectedModel.id.includes("gpt-image-2.5") ? outputFormat : undefined,
+      outputFormat: /gpt-image-2\.[56]/.test(selectedModel.id) ? outputFormat : undefined,
+      complexity: selectedModel.complexityParam?.length ? complexity : undefined,
       useAnnualUnlimited: isAnnualUnlimitedCreate,
       profileId: currentProfileId,
     };
@@ -2518,27 +2560,67 @@ export default function ImageWorkspacePage() {
         ) : null}
 
         {qualityOptions.length ? (
-          <SettingsAccordion label={qualityOptions.some((q) => /k$/i.test(q)) ? "Resolution" : "Quality"} summary={quality || qualityOptions[0]} defaultOpen>
-            <select
-              aria-label={t("Image quality or resolution")}
-              value={quality || qualityOptions[0]}
-              onChange={(e) => setQuality(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-pink-500"
-            >
-              {qualityOptions.map((q) => (
-                <option key={q} value={q}>{q}</option>
-              ))}
-            </select>
+          <SettingsAccordion
+            label={qualityOptions.some((q) => /k$/i.test(q)) ? "Resolution" : "Quality"}
+            summary={(() => {
+              const current = quality || qualityOptions[0];
+              const info = describeQualityOptions(qualityOptions) ?? describeResolutionOptions(qualityOptions);
+              return info?.[current]?.title ?? current;
+            })()}
+            defaultOpen
+          >
+            {(() => {
+              const info = describeQualityOptions(qualityOptions) ?? describeResolutionOptions(qualityOptions);
+              if (info) {
+                return (
+                  <OptionPicker
+                    ariaLabel={t("Image quality or resolution")}
+                    value={quality || qualityOptions[0]}
+                    options={qualityOptions}
+                    info={info}
+                    onChange={setQuality}
+                  />
+                );
+              }
+              return (
+                <select
+                  aria-label={t("Image quality or resolution")}
+                  value={quality || qualityOptions[0]}
+                  onChange={(e) => setQuality(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-pink-500"
+                >
+                  {qualityOptions.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
+              );
+            })()}
           </SettingsAccordion>
         ) : null}
         {resolutionOptions.length ? (
-          <SettingsAccordion label="Resolution" summary={resolution} defaultOpen>
-            <select aria-label="Image resolution" value={resolution} onChange={(e) => setResolution(e.target.value)} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-pink-500">
-              {resolutionOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
+          <SettingsAccordion label="Resolution" summary={describeResolutionOptions(resolutionOptions)?.[resolution]?.title ?? resolution} defaultOpen>
+            {(() => {
+              const info = describeResolutionOptions(resolutionOptions);
+              if (info) {
+                return <OptionPicker ariaLabel="Image resolution" value={resolution} options={resolutionOptions} info={info} onChange={setResolution} />;
+              }
+              return (
+                <select aria-label="Image resolution" value={resolution} onChange={(e) => setResolution(e.target.value)} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-pink-500">
+                  {resolutionOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              );
+            })()}
           </SettingsAccordion>
         ) : null}
-        {selectedModel.id.includes("gpt-image-2.5") ? (
+        {selectedModel.complexityParam?.length ? (
+          <SettingsAccordion label="Complexity" summary={complexity} defaultOpen={false}>
+            <select aria-label="Image complexity" value={complexity} onChange={(e) => setComplexity(e.target.value)} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-pink-500">
+              {selectedModel.complexityParam.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+            <p className="mt-1.5 text-[11px] text-zinc-500">How much the model plans the layout before drawing. Same price at every level.</p>
+          </SettingsAccordion>
+        ) : null}
+        {/gpt-image-2\.[56]/.test(selectedModel.id) ? (
           <SettingsAccordion label="Output format" summary={outputFormat} defaultOpen={false}>
             <select aria-label="Image output format" value={outputFormat} onChange={(e) => setOutputFormat(e.target.value as "png" | "jpeg" | "webp")} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-pink-500">
               <option value="png">PNG</option>

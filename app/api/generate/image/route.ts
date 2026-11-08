@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { isAdmin } from "@/lib/is-admin";
 import { getGenerationCost } from "@/lib/pricing";
-import { IMAGE_MODELS, getWaveSpeedGptImage25Credits } from "@/lib/image-models";
+import { IMAGE_MODELS, getWaveSpeedGptImage25Credits, isWaveSpeedGptImageModelId } from "@/lib/image-models";
+import { OPENAI_IMAGE_MODEL_MAP } from "@/lib/openai-image-routing";
 import { getCentralizedDynamicImageModels } from "@/lib/model-definition-registry";
 import { InsufficientCreditsError, recordFreeGeneration, rollbackGenerationCharge, saveAdditionalGenerationUrls, setActualProviderUsage, setGenerationMediaUrl, spendCredits } from "@/lib/credit-ledger";
 import { applyAnnualUnlimitedImageSlowdown, getAnnualUnlimitedImageEligibility } from "@/lib/annual-image-unlimited";
@@ -30,15 +31,6 @@ export const dynamic = "force-dynamic";
 
 const WAVESPEED_BASE_URL = "https://api.wavespeed.ai/api/v3";
 const IDEMPOTENCY_ROUTE = "generate:image";
-const OPENAI_IMAGE_MODEL_MAP: Record<string, string> = {
-  // Released 2026-09-08. Both variants sit on /v1/images/generations and
-  // /v1/images/edits, exactly like gpt-image-2, so generateOpenAIImage needs
-  // no change — only the id mapping.
-  "gpt-image-2-text-to-image": "gpt-image-2",
-  "gpt-image-2-image-to-image": "gpt-image-2",
-  "gpt-image/1.5-text-to-image": "gpt-image-1.5",
-  "gpt-image/1.5-image-to-image": "gpt-image-1.5",
-};
 
 interface ImageRequestBody {
   prompt: string;
@@ -52,6 +44,8 @@ interface ImageRequestBody {
   imageUrls?: string[];
   quality?: string;
   outputFormat?: "png" | "jpeg" | "webp";
+  /** GPT Image 2.6: planning depth (low | medium | high). */
+  complexity?: string;
   useAnnualUnlimited?: boolean;
   feature?: string;
   /** Provider input field override for legacy callers. */
@@ -577,6 +571,7 @@ export async function POST(req: NextRequest) {
       resolution,
       imageSize,
       outputFormat,
+      complexity,
       useAnnualUnlimited = true,
       feature,
     } = body;
@@ -725,7 +720,7 @@ export async function POST(req: NextRequest) {
     let creditsToCharge = unlimited.eligible
       ? 0
       : await getGenerationCost(effectiveModelId, 5, numImages, chargeQuality);
-    if (!unlimited.eligible && isWaveSpeedImageModel && effectiveModelId.includes("gpt-image-2.5")) {
+    if (!unlimited.eligible && isWaveSpeedImageModel && isWaveSpeedGptImageModelId(effectiveModelId)) {
       creditsToCharge = getWaveSpeedGptImage25Credits(effectiveModelId, numImages, quality, resolution, rawRefUrls.length);
     }
     if (!unlimited.eligible && creditsToCharge <= 0 && dynamicModel?.creditCost) {
@@ -968,6 +963,7 @@ export async function POST(req: NextRequest) {
         referenceUrls: resolvedRefs,
         negativePrompt,
         outputFormat: outputFormat === "jpeg" || outputFormat === "webp" || outputFormat === "png" ? outputFormat : undefined,
+        complexity,
       });
 
       const taskCount = waveSpeedImageRoute.outputCountField
