@@ -64,13 +64,35 @@ function Badge({ children }: { children: React.ReactNode }) {
   return <span className="inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold text-cyan-100">{children}</span>;
 }
 
-function Media({ data }: { data: PreviewData }) {
+function downloadHref(token: string, index: number): string {
+  return `/preview/${token}/download?i=${index}`;
+}
+
+/** Round download icon pinned to the corner of a media tile. */
+function DownloadIcon({ href, label, className = "right-3 top-3" }: { href: string; label: string; className?: string }) {
+  return (
+    <a
+      href={href}
+      download
+      aria-label={label}
+      title={label}
+      className={`absolute z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-lg backdrop-blur transition hover:bg-cyan-500 hover:text-black focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${className}`}
+    >
+      <Download className="h-[18px] w-[18px]" />
+    </a>
+  );
+}
+
+function Media({ data, token }: { data: PreviewData; token: string }) {
   if (data.kind === "video") {
     return (
       <div className="grid gap-3">
-        {data.urls.map((url) => (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
-          <video key={url} src={url} controls playsInline preload="metadata" className="w-full rounded-2xl border border-white/10 bg-black" />
+        {data.urls.map((url, index) => (
+          <div key={url} className="relative">
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <video src={url} controls playsInline preload="metadata" className="w-full rounded-2xl border border-white/10 bg-black" />
+            <DownloadIcon href={downloadHref(token, index)} label="Download video" />
+          </div>
         ))}
       </div>
     );
@@ -79,11 +101,22 @@ function Media({ data }: { data: PreviewData }) {
   if (data.kind === "audio") {
     return (
       <div className="grid gap-3">
-        {data.urls.map((url) => (
+        {data.urls.map((url, index) => (
           <div key={url} className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-500/10 via-transparent to-blue-600/10 p-6">
-            <div className="flex items-center gap-3 text-cyan-200">
-              <Music2 className="h-6 w-6" />
-              <span className="text-sm font-semibold">Audio</span>
+            <div className="flex items-center justify-between gap-3 text-cyan-200">
+              <div className="flex items-center gap-3">
+                <Music2 className="h-6 w-6" />
+                <span className="text-sm font-semibold">Audio</span>
+              </div>
+              <a
+                href={downloadHref(token, index)}
+                download
+                aria-label="Download audio"
+                title="Download audio"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/40 text-white transition hover:bg-cyan-500 hover:text-black focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+              >
+                <Download className="h-[18px] w-[18px]" />
+              </a>
             </div>
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <audio src={url} controls preload="metadata" className="w-full" />
@@ -97,11 +130,14 @@ function Media({ data }: { data: PreviewData }) {
   return (
     <div className={single ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
       {data.urls.map((url, index) => (
-        <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt={data.prompt ?? `Generated image ${index + 1}`} loading={index === 0 ? "eager" : "lazy"} className="h-auto w-full object-contain transition duration-300 group-hover:scale-[1.01]" />
-          {!single && <span className="absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-bold text-white backdrop-blur">{index + 1}</span>}
-        </a>
+        <div key={url} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+          <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt={data.prompt ?? `Generated image ${index + 1}`} loading={index === 0 ? "eager" : "lazy"} className="h-auto w-full object-contain transition duration-300 group-hover:scale-[1.01]" />
+          </a>
+          {!single && <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-bold text-white backdrop-blur">{index + 1}</span>}
+          <DownloadIcon href={downloadHref(token, index)} label={single ? "Download image" : `Download image ${index + 1}`} />
+        </div>
       ))}
     </div>
   );
@@ -137,7 +173,7 @@ export default function PreviewPage({ params }: { params: { token: string } }) {
 
         <section className="mt-8 overflow-hidden rounded-3xl border border-white/10 bg-[#0c111b]/90 shadow-2xl shadow-black/40">
           <div className="p-4 md:p-6">
-            <Media data={data} />
+            <Media data={data} token={params.token} />
           </div>
 
           <div className="border-t border-white/10 p-5 md:p-7">
@@ -151,13 +187,24 @@ export default function PreviewPage({ params }: { params: { token: string } }) {
             {data.prompt && <p className="mt-4 text-sm leading-7 text-slate-300">{data.prompt}</p>}
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
+              {data.urls.map((_, index) => (
+                <a
+                  key={index}
+                  href={downloadHref(params.token, index)}
+                  download
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-5 text-sm font-bold text-cyan-50 transition hover:bg-cyan-300/20"
+                >
+                  <Download className="h-4 w-4 text-cyan-300" />
+                  {data.urls.length === 1 ? "Download" : `Download ${index + 1}`}
+                </a>
+              ))}
               <a
                 href={first}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-5 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                <Download className="h-4 w-4 text-cyan-300" />
+                <ArrowUpRight className="h-4 w-4 text-cyan-300" />
                 {data.kind === "image" ? "Open original" : "Open file"}
               </a>
               <Link
