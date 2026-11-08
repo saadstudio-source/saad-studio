@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { isAdmin } from "@/lib/is-admin";
 import { getGenerationCost } from "@/lib/pricing";
-import { IMAGE_MODELS, getWaveSpeedGptImage25Credits, isWaveSpeedGptImageModelId } from "@/lib/image-models";
+import { IMAGE_MODELS, getWaveSpeedGptImage25Credits, isWaveSpeedGptImageModelId, normalizeGptImageTier } from "@/lib/image-models";
 import { OPENAI_IMAGE_MODEL_MAP } from "@/lib/openai-image-routing";
+import { pickDynamicImageProvider } from "@/lib/image-provider-select";
 import { getCentralizedDynamicImageModels } from "@/lib/model-definition-registry";
 import { InsufficientCreditsError, recordFreeGeneration, rollbackGenerationCharge, saveAdditionalGenerationUrls, setActualProviderUsage, setGenerationMediaUrl, spendCredits } from "@/lib/credit-ledger";
 import { applyAnnualUnlimitedImageSlowdown, getAnnualUnlimitedImageEligibility } from "@/lib/annual-image-unlimited";
@@ -634,8 +635,9 @@ export async function POST(req: NextRequest) {
         ? dynamicModel.image_api_route
         : (dynamicModel.text_api_route || dynamicModel.upstreamModelId || dynamicModel.id);
 
-      const isGoogle = /^(google|gemini|imagen)/i.test(targetApiRoute) || /google/i.test(dynamicModel.group || "");
-      const isOpenAI = /^(openai|dall-e)/i.test(targetApiRoute) || /openai/i.test(dynamicModel.group || "");
+      const dynamicProvider = pickDynamicImageProvider(targetApiRoute, dynamicModel.group);
+      const isGoogle = dynamicProvider === "google";
+      const isOpenAI = dynamicProvider === "openai";
 
       if (isGoogle) {
         googleImageModel = targetApiRoute;
@@ -708,7 +710,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const chargeQuality = resolution ?? quality ?? imageSize;
+    // GPT Image 2.5 / 2.6: normalise quality + resolution ONCE and use the same values for the
+    // credit charge and the provider payload (a padded / re-cased / imageSize-only value must not
+    // be billed as one tier and rendered as another). Unknown values are rejected, not defaulted.
+    let gptTier: { quality: string; resolution: string } | null = null;
+    if (isWaveSpeedImageModel && isWaveSpeedGptImageModelId(effectiveModelId)) {
+      const tier = normalizeGptImageTier(quality, resolution, imageSize);
+      if (!tier.ok) {
+        return NextResponse.json({ error: tier.error }, { status: 400 });
+      }
+      gptTier = { quality: tier.quality, resolution: tier.resolution };
+    }
+
+    const chargeQuality = gptTier?.resolution ?? resolution ?? quality ?? imageSize;
     const unlimited = useAnnualUnlimited
       ? await getAnnualUnlimitedImageEligibility({
           userId,
@@ -720,8 +734,8 @@ export async function POST(req: NextRequest) {
     let creditsToCharge = unlimited.eligible
       ? 0
       : await getGenerationCost(effectiveModelId, 5, numImages, chargeQuality);
-    if (!unlimited.eligible && isWaveSpeedImageModel && isWaveSpeedGptImageModelId(effectiveModelId)) {
-      creditsToCharge = getWaveSpeedGptImage25Credits(effectiveModelId, numImages, quality, resolution, rawRefUrls.length);
+    if (!unlimited.eligible && gptTier) {
+      creditsToCharge = getWaveSpeedGptImage25Credits(effectiveModelId, numImages, gptTier.quality, gptTier.resolution, rawRefUrls.length);
     }
     if (!unlimited.eligible && creditsToCharge <= 0 && dynamicModel?.creditCost) {
       creditsToCharge = Number(dynamicModel.creditCost) * (Number(numImages) || 1);
@@ -956,9 +970,9 @@ export async function POST(req: NextRequest) {
       const waveSpeedInput = buildWaveSpeedImageInput(waveSpeedImageRoute, {
         prompt: sanitizePrompt(prompt, 5000),
         aspectRatio,
-        quality,
-        resolution,
-        imageSize,
+        quality: gptTier?.quality ?? quality,
+        resolution: gptTier?.resolution ?? resolution,
+        imageSize: gptTier ? gptTier.resolution : imageSize,
         numImages,
         referenceUrls: resolvedRefs,
         negativePrompt,

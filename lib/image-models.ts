@@ -115,7 +115,33 @@ const GPT_IMAGE_26_EDIT_USD: Record<string, Record<string, number>> = {
 
 /** True for the WaveSpeed-routed GPT Image 2.5 / 2.6 rows (Flare + Sunburst, text + edit). */
 export function isWaveSpeedGptImageModelId(modelId: string): boolean {
-  return /gpt-image-2\.[56]/.test(modelId);
+  // Case-insensitive on purpose: the WaveSpeed router lower-cases ids, so an upper-case id must not
+  // slip past the pricing check and fall back to the flat default price.
+  return /gpt-image-2\.[56]/i.test(modelId);
+}
+
+export const GPT_IMAGE_QUALITIES = ["low", "medium", "high", "xhigh", "max"] as const;
+export const GPT_IMAGE_RESOLUTIONS = ["1k", "2k", "4k"] as const;
+
+export type GptImageTier = { ok: true; quality: string; resolution: string } | { ok: false; error: string };
+
+/**
+ * Single source of truth for the quality/resolution of a GPT Image 2.5 / 2.6 request.
+ * The SAME normalised values must feed the credit charge and the provider payload, otherwise a
+ * padded or re-cased value ("4K ", imageSize instead of resolution) can be billed as 1k and
+ * rendered as 4k. Absent values get the provider defaults; present-but-unknown values are rejected.
+ */
+export function normalizeGptImageTier(quality: unknown, resolution: unknown, imageSize?: unknown): GptImageTier {
+  const clean = (value: unknown) => (value == null ? "" : String(value).trim().toLowerCase());
+  const q = clean(quality) || "medium";
+  const r = clean(resolution) || clean(imageSize) || "1k";
+  if (!(GPT_IMAGE_QUALITIES as readonly string[]).includes(q)) {
+    return { ok: false, error: `Unsupported quality "${q}". Use one of: ${GPT_IMAGE_QUALITIES.join(", ")}.` };
+  }
+  if (!(GPT_IMAGE_RESOLUTIONS as readonly string[]).includes(r)) {
+    return { ok: false, error: `Unsupported resolution "${r}". Use one of: ${GPT_IMAGE_RESOLUTIONS.join(", ")}.` };
+  }
+  return { ok: true, quality: q, resolution: r };
 }
 
 export const GPT_IMAGE_COMPLEXITIES = ["low", "medium", "high"] as const;
@@ -125,15 +151,20 @@ export const GPT_IMAGE_CREDIT_FLOOR = 1;
 export const GPT_IMAGE_CREDIT_CEILING = 15;
 
 export function getWaveSpeedGptImage25Credits(modelId: string, numImages = 1, quality?: string | null, resolution?: string | null, referenceCount = 0): number {
-  const q = String(quality ?? "medium").toLowerCase();
-  const resValue = String(resolution ?? "1k").toLowerCase();
-  const res = resValue === "4k" ? "4k" : resValue === "2k" ? "2k" : "1k";
-  const isEdit = modelId.includes("image-to-image") || modelId.endsWith("/edit") || modelId.includes("-edit");
-  const is26 = modelId.includes("gpt-image-2.6");
+  // Fail closed: an unknown tier is priced at the dearest one, never at the cheap default.
+  // (The route rejects unknown tiers up front via normalizeGptImageTier; this is the backstop.)
+  const id = String(modelId).trim().toLowerCase();
+  const qValue = String(quality ?? "medium").trim().toLowerCase() || "medium";
+  const resValue = String(resolution ?? "1k").trim().toLowerCase() || "1k";
+  const known = (GPT_IMAGE_QUALITIES as readonly string[]).includes(qValue) && (GPT_IMAGE_RESOLUTIONS as readonly string[]).includes(resValue);
+  const q = known ? qValue : "max";
+  const res = known ? resValue : "4k";
+  const isEdit = id.includes("image-to-image") || id.endsWith("/edit") || id.includes("-edit");
+  const is26 = id.includes("gpt-image-2.6");
   const table = is26
     ? (isEdit ? GPT_IMAGE_26_EDIT_USD : GPT_IMAGE_26_TEXT_USD)
     : (isEdit ? GPT_IMAGE_25_EDIT_USD : GPT_IMAGE_25_TEXT_USD);
-  const base = table[q]?.[res] ?? table.medium[res];
+  const base = table[q][res];
   const extraReferenceUsd = isEdit ? Math.max(0, Math.ceil(Number(referenceCount) || 0) - 1) * 0.015 : 0;
   const units = Math.max(1, Math.ceil(Number(numImages) || 1));
   // Owner-set price band (2026-11-08): the cheapest combination (low @ 1k) costs
