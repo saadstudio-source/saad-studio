@@ -1383,6 +1383,16 @@ function VideoPageInner() {
     );
   }, [allModels]);
 
+  const editCapableModels = useMemo(() => {
+    return allModels.filter((m: any) =>
+      m.isActive !== false && (
+        typeof m.edit_api_route === "string" ||
+        (typeof m.video_api_route === "string" && m.video_api_route.includes("video-edit")) ||
+        m.api_route.includes("/edit-video")
+      )
+    );
+  }, [allModels]);
+
   const displayModelGroups = useMemo(() => {
     if (videoMode !== "extend") return dynamicModelGroups;
     const map = new Map<string, any>();
@@ -1401,6 +1411,28 @@ function VideoPageInner() {
     }
     return Array.from(map.values());
   }, [videoMode, dynamicModelGroups, extendCapableModels]);
+
+  const editModelGroups = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const m of editCapableModels) {
+      const groupName = (m.group || m.family_label || m.family || "Other").trim();
+      const groupKey = groupName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
+          family: groupKey,
+          family_label: groupName,
+          family_color: m.family_color || (m as any).color || "#06b6d4",
+          models: [],
+        });
+      }
+      map.get(groupKey)!.models.push(m);
+    }
+    return Array.from(map.values());
+  }, [editCapableModels]);
+
+  const modelGroupsForSelector = mainWorkflowTab === "edit"
+    ? editModelGroups
+    : displayModelGroups;
 
   const [selectedModel, setSelectedModel] = useState<WaveSpeedVideoModel>(DEFAULT_MODEL);
   const [modelOpen,     setModelOpen]     = useState(false);
@@ -1421,6 +1453,12 @@ function VideoPageInner() {
       setSelectedModel(centralModel);
     }
   }, [allModels, selectedModel.id, selectedModel.api_route]);
+
+  useEffect(() => {
+    if (mainWorkflowTab === "edit" && editCapableModels.length > 0 && !editCapableModels.some(m => m.id === selectedModel.id)) {
+      selectModel(editCapableModels[0]);
+    }
+  }, [editCapableModels, mainWorkflowTab, selectedModel.id]);
 
   useEffect(() => {
     const requestedTab = searchParams.get("tab");
@@ -5772,12 +5810,12 @@ function VideoPageInner() {
                       {lang === "ar" ? "اختر موديل الفيديو وخصائصه" : "Select Video Model"}
                     </span>
                     <span className="text-[11px] text-zinc-400 font-mono">
-                      {displayModelGroups.reduce((acc, g) => acc + g.models.length, 0)} {lang === "ar" ? "موديل" : "models"}
+                      {modelGroupsForSelector.reduce((acc, g) => acc + g.models.length, 0)} {lang === "ar" ? "موديل" : "models"}
                     </span>
                   </div>
 
                   <div className="max-h-[380px] overflow-y-auto py-1.5 divide-y divide-white/[0.04]">
-                    {displayModelGroups.map((g, gIdx) => (
+                    {modelGroupsForSelector.map((g, gIdx) => (
                       <div key={g.family} className="py-1">
                         <div className="px-4 py-1.5 flex items-center gap-2">
                           <span className="w-1.5 h-1.5 rounded-full" style={{ background: g.family_color }} />
@@ -7569,7 +7607,7 @@ function VideoPageInner() {
                               );
                             })
                           ) : (
-                            dynamicModelGroups.map((g, gIdx) => (
+                            modelGroupsForSelector.map((g, gIdx) => (
                               <div key={g.family} className={gIdx === 0 ? "pt-1" : ""}>
                                 {gIdx > 0 && <div className="mx-3 my-1.5 border-t border-slate-800/80" />}
                                 {g.models.map((m: any) => {
