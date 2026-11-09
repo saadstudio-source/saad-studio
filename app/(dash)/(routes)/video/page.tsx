@@ -648,6 +648,13 @@ function prettyModelName(name: string): string {
   return cleaned;
 }
 
+function displayVideoModelName(model: WaveSpeedVideoModel, isEditMode: boolean): string {
+  const name = prettyModelName(model.name);
+  return isEditMode && model.api_route === "google/gemini-omni-1.2-flash"
+    ? `${name} Edit`
+    : name;
+}
+
 type VideoModeLabel = "Text To Video" | "Image To Video" | "Reference To Video" | "Video Extend" | "Video Edit" | "Video To Video";
 
 /**
@@ -5722,7 +5729,7 @@ function VideoPageInner() {
                     style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: selectedModel.family_color }} />
-                    <span className="flex-1 truncate text-[13px]" style={{ color: "#e2e8f0" }}>{prettyModelName(selectedModel.name)}</span>
+                    <span className="flex-1 truncate text-[13px]" style={{ color: "#e2e8f0" }}>{displayVideoModelName(selectedModel, false)}</span>
                     {videoMode === "extend" && (
                       (selectedModel as any).pricingConfig?.extendBillingMode === "source_plus_new_segment" ? (
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 font-mono">
@@ -5798,7 +5805,7 @@ function VideoPageInner() {
                                   style={{ background: m.family_color }}
                                 />
                                 <span className={`text-[13px] font-medium truncate max-w-[150px] ${isSelected ? "text-white font-semibold" : "text-slate-300 group-hover:text-white"}`}>
-                                  {prettyModelName(m.name)}
+                                  {displayVideoModelName(m, false)}
                                 </span>
                                 {videoMode === "extend" && (
                                   m.pricingConfig?.extendBillingMode === "source_plus_new_segment" ? (
@@ -5841,7 +5848,7 @@ function VideoPageInner() {
                     style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: selectedModel.family_color }} />
-                    <span className="flex-1 text-[13px]" style={{ color: "#e2e8f0" }}>{prettyModelName(selectedModel.name)}</span>
+                    <span className="flex-1 text-[13px]" style={{ color: "#e2e8f0" }}>{displayVideoModelName(selectedModel, false)}</span>
                     {bStyle && (
                       <span
                         className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm"
@@ -7517,7 +7524,7 @@ function VideoPageInner() {
                       style={{ background: hexA(selectedModel.family_color, 0.08), border: `1px solid ${hexA(selectedModel.family_color, 0.3)}`, color: "#e2e8f0" }}
                     >
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: selectedModel.family_color }} />
-                      <span className="flex-1 text-sm font-medium truncate">{prettyModelName(selectedModel.name)}</span>
+                      <span className="flex-1 text-sm font-medium truncate">{displayVideoModelName(selectedModel, mainWorkflowTab === "edit")}</span>
                       {bStyle && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: bStyle.bg, color: bStyle.text }}>{selectedModel.badge}</span>
                       )}
@@ -7552,7 +7559,7 @@ function VideoPageInner() {
                                 >
                                   <div className="flex items-center gap-2 w-full">
                                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.family_color }} />
-                                    <span className="flex-1 text-left text-[13px]">{prettyModelName(m.name)}</span>
+                                    <span className="flex-1 text-left text-[13px]">{displayVideoModelName(m, mainWorkflowTab === "edit")}</span>
                                     {bs && (
                                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm" style={{ background: bs.bg, color: bs.text }}>{m.badge}</span>
                                     )}
@@ -7577,7 +7584,7 @@ function VideoPageInner() {
                                     >
                                       <div className="flex items-center gap-2 w-full">
                                         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.family_color }} />
-                                        <span className="flex-1 text-left text-[13px]">{prettyModelName(m.name)}</span>
+                                        <span className="flex-1 text-left text-[13px]">{displayVideoModelName(m, mainWorkflowTab === "edit")}</span>
                                         {bs && (
                                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm" style={{ background: bs.bg, color: bs.text }}>{m.badge}</span>
                                         )}
