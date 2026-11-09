@@ -940,6 +940,28 @@ export const VIDEO_MODEL_REGISTRY: WaveSpeedVideoModel[] = [
       combines_references_with_frames: true,
     }),
   },
+  {
+    id: "google-gemini-omni-1.2-flash",
+    name: "Google Gemini Omni 1.2 Flash",
+    family: "veo", family_label: "Google Veo", family_color: "#3b82f6",
+    badge: "NEW",
+    description: "Google Gemini Omni 1.2 Flash via the official Google Interactions API. Native audio, text/image/video input, and cinematic controls.",
+    api_route: "google/gemini-omni-1.2-flash",
+    route_confirmed: true,
+    capabilities: t2vCaps({
+      optional_image: true,
+      optional_video: true,
+      has_end_frame: true,
+      aspect_ratios: ["16:9", "9:16"],
+      durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      resolutions: ["360p", "720p", "1080p", "4k"],
+      max_reference_images: 6,
+      max_reference_videos: 1,
+      max_reference_video_total_seconds: 3,
+      max_prompt_characters: 5000,
+      combines_references_with_frames: true,
+    }),
+  },
 
   // ╔══════════════════════════════════════════════════════════════════════════
   // ║ Black Forest Labs Flux 3 Unified Video
