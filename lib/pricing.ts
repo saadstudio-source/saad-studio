@@ -238,6 +238,7 @@ const MODEL_ALIAS_MAP: Record<string, string> = {
   "google/veo3-text-to-video":                     "veo3",
   "google/gemini-omni-video":                     "gemini_omni_video",
   "google/gemini-omni-flash":                     "gemini_omni_flash",
+  "google/gemini-omni-1.2-flash":                "gemini_omni_flash",
   "bytedance/dreamina-v3.0/text-to-video-720p":   "seedance2",
   "x-ai/grok-imagine-video/text-to-video":        "grok_vid",
   "x-ai/grok-imagine-video/edit-video":           "grok_vid",
@@ -414,7 +415,7 @@ function normalizeGoogleVideoQuality(quality: string | null | undefined): Google
 function resolveGoogleVideoBillingKey(modelRef: string): GoogleVideoBillingKey | null {
   const key = (modelRef || "").trim().toLowerCase();
   if (!key) return null;
-  if (key === "google/gemini-omni-flash" || key === "gemini_omni_flash") return "omni_flash";
+  if (key === "google/gemini-omni-flash" || key === "google/gemini-omni-1.2-flash" || key === "gemini_omni_flash") return "omni_flash";
   if (key === "google/veo3.1-lite-text-to-video" || key === "google/veo-3.1-lite-generate-preview" || key === "veo31_lite" || key === "veo31_gem_lite") return "veo31_lite";
   if (key === "google/veo3.1-fast-text-to-video" || key === "google/veo-3.1-fast-generate-preview" || key === "veo31_fast" || key === "veo31_gem_fast") return "veo31_fast";
   if (key === "google/veo3.1-text-to-video" || key === "google/veo-3.1-generate-preview" || key === "veo31" || key === "veo31_gem") return "veo31";

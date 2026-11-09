@@ -62,6 +62,22 @@ export const VIDEO_MODELS: VideoModel[] = [
     maxDuration: 10,
     description: "Direct Google Gemini Omni 1.1 Flash video generation, editing, upscaling, and interpolation",
   },
+  {
+    id: "google/gemini-omni-1.2-flash",
+    name: "Google Gemini Omni 1.2 Flash",
+    family: "Google Gemini",
+    familyColor: "#22c55e",
+    inputType: "text-to-video",
+    accepts: ["start-frame", "end-frame", "reference-image", "video"],
+    maxImages: 6,
+    aspectRatios: ["16:9", "9:16"],
+    durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    resolutions: ["360p", "720p", "1080p", "4k"],
+    badge: "NEW",
+    creditCost: 30.0,
+    maxDuration: 15,
+    description: "Google Gemini Omni 1.2 Flash via the official Google Interactions API",
+  },
   // â”€â”€ KLING â”€â”€
   {
     id: "kling-3.0/video",

@@ -49,6 +49,7 @@ const GOOGLE_VEO31_ROUTE = "google/veo3.1-text-to-video";
 const GOOGLE_VEO3_FAST_ROUTE = "google/veo3-fast-text-to-video";
 const GOOGLE_VEO3_ROUTE = "google/veo3-text-to-video";
 const LEGACY_GEMINI_OMNI_VIDEO_ROUTE = "google/gemini-omni-video";
+const GEMINI_OMNI_12_ROUTE = "google/gemini-omni-1.2-flash";
 const BYTEPLUS_ARK_BASE = (process.env.BYTEPLUS_ARK_BASE_URL || "https://ark.ap-southeast.bytepluses.com/api/v3").replace(/\/+$/, "");
 const BYTEPLUS_CONTENT_TASKS_URL = `${BYTEPLUS_ARK_BASE}/contents/generations/tasks`;
 const GENERATION_SERVICE_UNAVAILABLE_MESSAGE = "This generation service is temporarily unavailable. Please try again later.";
@@ -99,7 +100,7 @@ function resolveGoogleVideoModeLabel(input: {
 }): GoogleVideoModeLabel {
   if (input.hasVideo) {
     if (input.requestedMode === "Video Extend" || input.requestedMode === "video_extend" || input.requestedMode === "extend") return "Video Extend";
-    return (input.modelRoute === "google/gemini-omni-flash" || input.modelRoute === LEGACY_GEMINI_OMNI_VIDEO_ROUTE || input.hasPreviousInteraction) ? "Video Edit" : "Video Extend";
+    return (input.modelRoute === "google/gemini-omni-flash" || input.modelRoute === GEMINI_OMNI_12_ROUTE || input.modelRoute === LEGACY_GEMINI_OMNI_VIDEO_ROUTE || input.hasPreviousInteraction) ? "Video Edit" : "Video Extend";
   }
   if (input.referenceCount > 0) return "Reference To Video";
   if (input.hasStartImage || input.hasEndImage) return "Image To Video";
@@ -527,7 +528,7 @@ function normalizeGeminiDuration(value: unknown, resolution: VeoResolution, hasR
 }
 
 function resolveGoogleVeoTier(modelRoute: string): VeoTier {
-  if (modelRoute === "google/gemini-omni-flash" || modelRoute === LEGACY_GEMINI_OMNI_VIDEO_ROUTE) return "omni_flash";
+  if (modelRoute === "google/gemini-omni-flash" || modelRoute === GEMINI_OMNI_12_ROUTE || modelRoute === LEGACY_GEMINI_OMNI_VIDEO_ROUTE) return "omni_flash";
   if (modelRoute === GOOGLE_VEO31_FAST_ROUTE) return "fast";
   if (modelRoute === GOOGLE_VEO31_LITE_ROUTE) return "lite";
   if (modelRoute === GOOGLE_VEO3_FAST_ROUTE) return "legacy_fast";
@@ -540,6 +541,7 @@ function resolveGoogleVeoProviderModel(modelRoute: string): string {
   if (modelRoute === GOOGLE_VEO31_LITE_ROUTE) return "veo-3.1-lite-generate-preview";
   if (modelRoute === GOOGLE_VEO3_FAST_ROUTE) return "veo-3.0-fast-generate-001";
   if (modelRoute === GOOGLE_VEO3_ROUTE) return "veo-3.0-generate-001";
+  if (modelRoute === GEMINI_OMNI_12_ROUTE) return "gemini-omni-1.2-flash";
   if (modelRoute === "google/gemini-omni-flash" || modelRoute === LEGACY_GEMINI_OMNI_VIDEO_ROUTE) return "gemini-omni-1.1-flash";
   return "veo-3.1-generate-preview";
 }
@@ -2629,7 +2631,7 @@ export async function POST(req: NextRequest) {
         modelRoute === GOOGLE_VEO31_FAST_ROUTE ||
         modelRoute === GOOGLE_VEO31_ROUTE ||
         modelRoute === GOOGLE_VEO31_PRO_ROUTE;
-      const isOmniDirectModel = modelRoute === "google/gemini-omni-flash" || modelRoute === LEGACY_GEMINI_OMNI_VIDEO_ROUTE;
+      const isOmniDirectModel = modelRoute === "google/gemini-omni-flash" || modelRoute === GEMINI_OMNI_12_ROUTE || modelRoute === LEGACY_GEMINI_OMNI_VIDEO_ROUTE;
       const supportsGoogleVideoInput =
         isOmniDirectModel ||
         isGoogleVeo31ExtensionRoute;
@@ -2656,7 +2658,7 @@ export async function POST(req: NextRequest) {
         Boolean(resolvedStartImage) ||
         Boolean(resolvedEndImage) ||
         resolvedReferenceSources.length > 0 ||
-        (Boolean(resolvedStartVideo) && modelRoute !== "google/gemini-omni-flash" && modelRoute !== LEGACY_GEMINI_OMNI_VIDEO_ROUTE);
+        (Boolean(resolvedStartVideo) && modelRoute !== "google/gemini-omni-flash" && modelRoute !== GEMINI_OMNI_12_ROUTE && modelRoute !== LEGACY_GEMINI_OMNI_VIDEO_ROUTE);
       const requestedGoogleVideoMode =
         typeof payload.google_video_mode === "string"
           ? payload.google_video_mode
@@ -2796,6 +2798,7 @@ export async function POST(req: NextRequest) {
           previousInteractionId,
           video,
           videoTask: googleVideoModeLabel === "Video Extend" ? "extend" : undefined,
+          interactionModel: resolveGoogleVeoProviderModel(modelRoute),
         });
       } catch (err) {
         if (!providerDispatched && generationId && chargedUserId && chargedCredits > 0) {

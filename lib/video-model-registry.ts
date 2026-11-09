@@ -146,6 +146,7 @@ export type GoogleVideoRoute =
   | "google/veo3-fast-text-to-video"
   | "google/veo3-text-to-video"
   | "google/gemini-omni-flash"
+  | "google/gemini-omni-1.2-flash"
   | "google/gemini-omni-video";
 
 export type GoogleVideoTier =
@@ -312,6 +313,21 @@ export const GOOGLE_VIDEO_CONSTRAINTS: Record<GoogleVideoRoute, GoogleVideoConst
     extensionCapable: true,
     outputCount: 1,
   },
+  "google/gemini-omni-1.2-flash": {
+    route: "google/gemini-omni-1.2-flash",
+    tier: "omni_flash",
+    providerModel: "gemini-omni-1.2-flash",
+    aspectRatios: ["16:9", "9:16"],
+    durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    resolutions: ["360p", "720p", "1080p", "4k"],
+    maxReferenceImages: 6,
+    maxReferenceVideos: 1,
+    supportsStartImage: true,
+    supportsEndFrame: true,
+    supportsVideoInput: true,
+    extensionCapable: true,
+    outputCount: 1,
+  },
   "google/gemini-omni-video": {
     route: "google/gemini-omni-video",
     tier: "omni_flash",
@@ -383,7 +399,8 @@ export function normalizeGoogleVideoOptions(route: GoogleVideoRoute, input: Norm
     NaN;
   let duration = Number.isFinite(rawDuration) ? Math.floor(rawDuration) : constraints.tier === "omni_flash" ? 5 : 8;
   if (constraints.tier === "omni_flash") {
-    duration = Math.max(3, Math.min(10, duration));
+    const omniMaxDuration = route === "google/gemini-omni-1.2-flash" && (mode === "text_to_video" || mode === "image_to_video") ? 15 : 10;
+    duration = Math.max(3, Math.min(omniMaxDuration, duration));
   } else if (mode === "video_extend" || referenceImageCount > 0 || resolution === "1080p" || resolution === "4k") {
     duration = 8;
   } else if (!constraints.durations.includes(duration)) {

@@ -295,6 +295,21 @@ describe("pricing core user charge parity", () => {
     expect(estimateProviderCostSync("google/gemini-omni-flash", 10, "720p", 1).usd).toBe(1);
   });
 
+  it("keeps Gemini Omni 1.2 on the Google Omni pricing and documented limits", async () => {
+    invalidatePricingCache();
+
+    await expect(getGenerationCost("google/gemini-omni-1.2-flash", 15, 1, "720p")).resolves.toBe(84);
+    const options = normalizeGoogleVideoOptions("google/gemini-omni-1.2-flash", {
+      duration: 15,
+      resolution: "1080p",
+      aspectRatio: "9:16",
+    });
+    expect(options.providerModel).toBe("gemini-omni-1.2-flash");
+    expect(options.duration).toBe(15);
+    expect(options.resolution).toBe("1080p");
+    expect(options.aspectRatio).toBe("9:16");
+  });
+
   it("routes Gemini Omni video input as extension when explicitly requested", () => {
     const omni = normalizeGoogleVideoOptions("google/gemini-omni-flash", {
       duration: 10,

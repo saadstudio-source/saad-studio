@@ -97,6 +97,8 @@ export interface StartVeoParams {
   videoTask?: "edit" | "extend";
   /** Stateful video editing: parent interaction ID to edit */
   previousInteractionId?: string;
+  /** Explicit Google Interactions model for versioned Omni routes. */
+  interactionModel?: string;
 }
 
 export interface VeoOperationHandle {
@@ -126,7 +128,7 @@ export async function startVeoGeneration(
   params: StartVeoParams,
 ): Promise<VeoOperationHandle> {
   const ai = getGenAI();
-  const model = VEO_MODELS[params.tier];
+    const model = params.interactionModel || VEO_MODELS[params.tier];
 
   if (params.tier === "omni_flash") {
     const key = getGoogleApiKey();
@@ -268,7 +270,10 @@ export async function startVeoGeneration(
       input: inputList,
       background: true,
       response_format: {
-        type: "video"
+        type: "video",
+        aspect_ratio: params.aspectRatio,
+        resolution: params.resolution,
+        duration: params.durationSeconds ? `${params.durationSeconds}s` : undefined,
       },
       generation_config: {
         video_config: {
@@ -350,7 +355,7 @@ export async function startVeoGeneration(
 export async function pollVeoOperation(
   handle: VeoOperationHandle,
 ): Promise<VeoPollResult> {
-  if (handle.model === "gemini-omni-1.1-flash" || handle.model === "gemini-omni-flash-preview") {
+  if (handle.model === "gemini-omni-1.1-flash" || handle.model === "gemini-omni-1.2-flash" || handle.model === "gemini-omni-flash-preview") {
     const interactionId = handle.name.startsWith("interactions/")
       ? handle.name.replace("interactions/", "")
       : handle.name;

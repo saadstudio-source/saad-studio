@@ -154,6 +154,7 @@ const VIDEO_ROUTE_COST_MAP = new Map<string, number>([
   ["google/veo3-text-to-video", 96.0],
   ["google/gemini-omni-video", 30.0],
   ["google/gemini-omni-flash", 30.0],
+  ["google/gemini-omni-1.2-flash", 30.0],
   ["bytedance/seedance-2.0/text-to-video", 40],
   ["bytedance/seedance-2.0/image-to-video", 40],
   ["bytedance/seedance-2.0/text-to-video-turbo", 27],
@@ -603,7 +604,7 @@ function getVideoCreditsByModelIdFallback(modelId: string, payload?: VideoPayloa
   ) {
     return getSeedance20MiniCredits(modelId, payload);
   }
-  if (modelId === "google/gemini-omni-flash" || modelId === "google/gemini-omni-video") {
+  if (modelId === "google/gemini-omni-flash" || modelId === "google/gemini-omni-1.2-flash" || modelId === "google/gemini-omni-video") {
     return applySoundMultiplier(getGeminiOmniFlashCredits(payload), payload);
   }
   if (modelId === "minimax-h3") return getMinimaxH3Credits(payload, undefined, "minimax-h3");
@@ -851,7 +852,7 @@ function getVideoCreditsByRouteFallback(modelRoute: string, payload?: VideoPaylo
   if (modelRoute.startsWith("black-forest-labs/flux-3") || modelRoute.startsWith("black-forest-labs-flux-3")) {
     return getFlux3Credits(modelRoute, payload);
   }
-  if (modelRoute === "google/gemini-omni-flash" || modelRoute === "google/gemini-omni-video") {
+  if (modelRoute === "google/gemini-omni-flash" || modelRoute === "google/gemini-omni-1.2-flash" || modelRoute === "google/gemini-omni-video") {
     return getGeminiOmniFlashCredits(payload);
   }
   if (
