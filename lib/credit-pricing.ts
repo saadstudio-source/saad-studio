@@ -741,12 +741,20 @@ function getVideoCreditsByRouteFallback(modelRoute: string, payload?: VideoPaylo
     const highRate = quality === "1080p";
     const normalRate = highRate ? 0.235 : 0.157;
     const countedRate = highRate ? 0.141 : 0.094;
+    // WaveSpeed source evidence: Kling V4 reference-to-video at 720p costs
+    // $2.00175 for a 15s job, i.e. $0.13345/s before SaadStudio margin.
+    const reference720pRate = 2.00175 / 15;
     const isEdit = modelRoute.endsWith("/video-edit");
     const hasReferenceVideos = modelRoute.endsWith("/reference-to-video") && countStringList(payload?.videos ?? payload?.reference_videos) > 0;
     if (!isEdit && !hasReferenceVideos) return parseFloat((outputDuration * normalRate * 1.4 * 40).toFixed(2));
     const sourceDuration = Math.min(30, Math.max(0, Math.ceil(Number(payload?.source_video_duration ?? payload?.video_duration ?? 0) || 0)));
-    const countedSeconds = Math.min(60, outputDuration + Math.max(outputDuration, sourceDuration));
-    return parseFloat((countedSeconds * countedRate * 1.4 * 40).toFixed(2));
+    const countedSeconds = isEdit
+      ? Math.min(60, outputDuration + Math.max(outputDuration, sourceDuration))
+      : hasReferenceVideos
+        ? Math.min(60, Math.max(outputDuration, sourceDuration))
+        : outputDuration;
+    const effectiveRate = hasReferenceVideos && !highRate ? reference720pRate : countedRate;
+    return parseFloat((countedSeconds * effectiveRate * 1.4 * 40).toFixed(2));
   }
   if (modelRoute === "kwaivgi/kling-v2.6-std/motion-control") {
     const duration = Math.min(30, Math.max(3, readDuration(payload, 3)));

@@ -34,6 +34,7 @@ describe("WaveSpeed new model contracts", () => {
     expect(getVideoCreditsByRoute("kwaivgi/kling-v4.0/text-to-video", { duration: 5, resolution: "720p" })).toBe(43.96);
     expect(getVideoCreditsByRoute("kwaivgi/kling-v4.0/video-extend", { duration: 5, resolution: "1080p" })).toBe(65.8);
     expect(getVideoCreditsByRoute("kwaivgi/kling-v4.0/video-edit", { duration: 5, resolution: "720p", source_video_duration: 5 })).toBe(52.64);
-    expect(getVideoCreditsByRoute("kwaivgi/kling-v4.0/reference-to-video", { duration: 5, resolution: "720p", videos: ["v"], source_video_duration: 8 })).toBe(68.43);
+    expect(getVideoCreditsByRoute("kwaivgi/kling-v4.0/reference-to-video", { duration: 5, resolution: "720p", videos: ["v"], source_video_duration: 8 })).toBe(59.79);
+    expect(getVideoCreditsByRoute("kwaivgi/kling-v4.0/reference-to-video", { duration: 15, resolution: "720p", videos: ["v"], source_video_duration: 15 })).toBe(112.1);
   });
 });
