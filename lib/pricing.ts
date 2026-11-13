@@ -1307,13 +1307,14 @@ export function calculateTtsCredits(textOrCount?: string | number | null, model?
 }
 
 /**
- * Canonical Music duration-based customer credit pricing.
- * Credits = max(4, ceil(2 + durationSec * 0.12))
- * Acceptance: 15s=4CR, 30s=6CR, 60s=10CR, 90s=13CR, 120s=17CR, 180s=24CR, 240s=31CR, 300s=38CR.
+ * WaveSpeed source evidence: elevenlabs/music costs $0.30 for a 30s request.
+ * Apply the existing 1.4 margin and 40 credits/USD conversion, then round up
+ * so every request covers the provider cost.
+ * Credits = ceil(durationSec * ($0.30 / 30) * 1.4 * 40)
  */
 export function calculateMusicCredits(durationSec?: number | null): number {
   const dur = Number.isFinite(Number(durationSec)) && Number(durationSec) > 0 ? Number(durationSec) : 30;
-  return Math.max(4, Math.ceil(2 + dur * 0.12));
+  return Math.max(1, Math.ceil((dur * 56) / 100));
 }
 
 /**

@@ -10,17 +10,17 @@ import { getAudioActionCredits } from "@/lib/credit-pricing";
 describe("Audio Suite Unified Dynamic Pricing Suite", () => {
   // ── 1. MUSIC DURATION ACCEPTANCE TABLE ──
   const MUSIC_ACCEPTANCE_TABLE: Array<{ sec: number; expectedCredits: number }> = [
-    { sec: 15, expectedCredits: 4 },
-    { sec: 30, expectedCredits: 6 },
-    { sec: 60, expectedCredits: 10 },
-    { sec: 90, expectedCredits: 13 },
-    { sec: 120, expectedCredits: 17 },
-    { sec: 180, expectedCredits: 24 },
-    { sec: 240, expectedCredits: 31 },
-    { sec: 300, expectedCredits: 38 },
+    { sec: 15, expectedCredits: 9 },
+    { sec: 30, expectedCredits: 17 },
+    { sec: 60, expectedCredits: 34 },
+    { sec: 90, expectedCredits: 51 },
+    { sec: 120, expectedCredits: 68 },
+    { sec: 180, expectedCredits: 101 },
+    { sec: 240, expectedCredits: 135 },
+    { sec: 300, expectedCredits: 168 },
   ];
 
-  it("verifies the exact canonical Music pricing acceptance table: max(4, ceil(2 + durationSec * 0.12))", () => {
+  it("verifies WaveSpeed music source cost with the SaadStudio margin", () => {
     for (const row of MUSIC_ACCEPTANCE_TABLE) {
       const calculated = calculateMusicCredits(row.sec);
       expect(calculated).toBe(row.expectedCredits);
@@ -84,9 +84,9 @@ describe("Audio Suite Unified Dynamic Pricing Suite", () => {
 
   // ── 5. DEFAULT FALLBACK SANITY CHECKS ──
   it("handles empty / undefined inputs with sensible safe minimums", () => {
-    expect(calculateMusicCredits(null)).toBe(6); // default 30s -> 6 CR
-    expect(calculateMusicCredits(undefined)).toBe(6);
-    expect(calculateMusicCredits(0)).toBe(6);
+    expect(calculateMusicCredits(null)).toBe(17); // default 30s -> 17 CR
+    expect(calculateMusicCredits(undefined)).toBe(17);
+    expect(calculateMusicCredits(0)).toBe(17);
 
     expect(calculateSfxCredits(null)).toBe(4); // default 5s -> 4 CR
     expect(calculateSfxCredits(undefined)).toBe(4);
